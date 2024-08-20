@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Run SwiftLint in strict mode
+if which swiftlint >/dev/null; then
+  swiftlint lint --strict
+else
+  echo "warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint"
+fi
+
+# Capture the exit status
+RESULT=$?
+
+# If SwiftLint violations were found, prevent the commit
+if [ $RESULT -ne 0 ]; then
+  echo "SwiftLint violations found. Please fix the issues before committing."
+  exit $RESULT
+fi
+
+# Allow the commit
+exit 0
+
