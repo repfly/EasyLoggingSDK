@@ -18,7 +18,7 @@ struct DirectoryHelper  {
                 throw NSError(domain: "Logger", code: 1, userInfo: [NSLocalizedDescriptionKey: "Documents directory not found"])
             }
         } catch {
-            Logger.shared.log("Error retrieving documents directory: \(error.localizedDescription)", level: .error)
+            EasyLogger.shared.log("Error retrieving documents directory: \(error.localizedDescription)", level: .error)
             return ""
         }
     }

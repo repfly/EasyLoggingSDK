@@ -5,15 +5,15 @@ struct LoggingConfiguration {
 import CocoaLumberjack
 import Foundation
 
-public class Logger {
-    public static let shared = Logger()
+public class EasyLogger {
+    public static let shared = EasyLogger()
 
     private let crashFlagKey = "wasAppCrashed"
 
     private init() {
         DDLog.add(DDOSLogger.sharedInstance)
         setUncaughtExceptionHandler()
-        detectPreviousCrash()
+        debugPrint("Logging session started.")
     }
 
     // MARK: - Crash Detection
@@ -29,7 +29,7 @@ public class Logger {
             Stack Trace:
             \(stack)
             """
-            Logger.shared.log(crashReport, level: .error)
+            EasyLogger.shared.log(crashReport, level: .error)
         }
     }
 
@@ -48,7 +48,15 @@ public class Logger {
 
     // MARK: - Logging
 
-    public func configureFileLogger(logsDirectory: String) {
+    public func setup(crashDetection: Bool) {
+        if crashDetection {
+            detectPreviousCrash()
+        }
+        configureFileLogger()
+    }
+
+    private func configureFileLogger() {
+        let logsDirectory = DirectoryHelper.getLogDirectory()
         let fileManager = DDLogFileManagerDefault(logsDirectory: logsDirectory)
         let fileLogger = DDFileLogger(logFileManager: fileManager)
         fileLogger.rollingFrequency = TimeInterval(60 * 60 * 24)
