@@ -15,11 +15,15 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", from: "3.8.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
     ],
     targets: [
         .target(
             name: "EasyLoggingSDK",
-            dependencies: ["CocoaLumberjack"]
+            dependencies: [
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "CocoaLumberjack", package: "CocoaLumberjack"),
+            ]
         ),
         .testTarget(
             name: "EasyLoggingSDKTests",

@@ -1,19 +1,31 @@
-struct LoggingConfiguration {
-    let filename: String
-}
-
 import CocoaLumberjack
+import Logging
 import Foundation
 
 public class EasyLogger {
     public static let shared = EasyLogger()
 
+    var hasCrashed: Bool {
+        UserDefaults.standard.bool(forKey: crashFlagKey) ?? false
+    }
+
     private let crashFlagKey = "wasAppCrashed"
 
     private init() {
+        initLogger()
+    }
+
+    private func initLogger() {
         DDLog.add(DDOSLogger.sharedInstance)
+        if let instance = DDTTYLogger.sharedInstance {
+            DDLog.add(instance)
+        }
         setUncaughtExceptionHandler()
         debugPrint("Logging session started.")
+
+        LoggingSystem.bootstrap { label in
+             LumberjackLogHandler(label: label)
+         }
     }
 
     // MARK: - Crash Detection
@@ -59,8 +71,9 @@ public class EasyLogger {
         let logsDirectory = DirectoryHelper.getLogDirectory()
         let fileManager = DDLogFileManagerDefault(logsDirectory: logsDirectory)
         let fileLogger = DDFileLogger(logFileManager: fileManager)
-        fileLogger.rollingFrequency = TimeInterval(60 * 60 * 24)
-        fileLogger.logFileManager.maximumNumberOfLogFiles = 7
+        fileLogger.logFileManager.maximumNumberOfLogFiles = 1
+        fileLogger.rollingFrequency = 0
+        fileLogger.maximumFileSize = 1_000_000 * 5
 
         DDLog.add(fileLogger)
     }
@@ -72,7 +85,6 @@ public class EasyLogger {
         function: String = #function,
         line: Int = #line
     ) {
-        let timestamp = Date()
         let formattedMessage = "\(level.logDescriptionPrefix) \(fileName(from: file)):\(line) \(function) - \(message)"
 
         let logMessage = DDLogMessage(
@@ -84,7 +96,7 @@ public class EasyLogger {
             function: function,
             line: UInt(line),
             tag: nil,
-            timestamp: timestamp
+            timestamp: .init()
         )
 
         DDLog.log(asynchronous: true, message: logMessage)
