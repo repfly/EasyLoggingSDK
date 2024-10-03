@@ -1,19 +1,31 @@
-struct LoggingConfiguration {
-    let filename: String
-}
-
 import CocoaLumberjack
+import Logging
 import Foundation
 
-public class Logger {
-    public static let shared = Logger()
+public class EasyLogger {
+    public static let shared = EasyLogger()
+
+    var hasCrashed: Bool {
+        UserDefaults.standard.bool(forKey: crashFlagKey) ?? false
+    }
 
     private let crashFlagKey = "wasAppCrashed"
 
     private init() {
+        initLogger()
+    }
+
+    private func initLogger() {
         DDLog.add(DDOSLogger.sharedInstance)
+        if let instance = DDTTYLogger.sharedInstance {
+            DDLog.add(instance)
+        }
         setUncaughtExceptionHandler()
-        detectPreviousCrash()
+        debugPrint("Logging session started.")
+
+        LoggingSystem.bootstrap { label in
+             LumberjackLogHandler(label: label)
+         }
     }
 
     // MARK: - Crash Detection
@@ -29,7 +41,7 @@ public class Logger {
             Stack Trace:
             \(stack)
             """
-            Logger.shared.log(crashReport, level: .error)
+            EasyLogger.shared.log(crashReport, level: .error)
         }
     }
 
@@ -48,11 +60,20 @@ public class Logger {
 
     // MARK: - Logging
 
-    public func configureFileLogger(logsDirectory: String) {
+    public func setup(crashDetection: Bool) {
+        if crashDetection {
+            detectPreviousCrash()
+        }
+        configureFileLogger()
+    }
+
+    private func configureFileLogger() {
+        let logsDirectory = DirectoryHelper.getLogDirectory()
         let fileManager = DDLogFileManagerDefault(logsDirectory: logsDirectory)
         let fileLogger = DDFileLogger(logFileManager: fileManager)
-        fileLogger.rollingFrequency = TimeInterval(60 * 60 * 24)
-        fileLogger.logFileManager.maximumNumberOfLogFiles = 7
+        fileLogger.logFileManager.maximumNumberOfLogFiles = 1
+        fileLogger.rollingFrequency = 0
+        fileLogger.maximumFileSize = 1_000_000 * 5
 
         DDLog.add(fileLogger)
     }
@@ -64,7 +85,6 @@ public class Logger {
         function: String = #function,
         line: Int = #line
     ) {
-        let timestamp = Date()
         let formattedMessage = "\(level.logDescriptionPrefix) \(fileName(from: file)):\(line) \(function) - \(message)"
 
         let logMessage = DDLogMessage(
@@ -76,7 +96,7 @@ public class Logger {
             function: function,
             line: UInt(line),
             tag: nil,
-            timestamp: timestamp
+            timestamp: .init()
         )
 
         DDLog.log(asynchronous: true, message: logMessage)

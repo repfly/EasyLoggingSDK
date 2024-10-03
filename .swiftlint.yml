@@ -1,0 +1,68 @@
+# SwiftLint Configuration File
+
+# List of disabled rules
+disabled_rules:
+  - trailing_whitespace
+  - line_length # if you have a specific need for longer lines
+  - identifier_name # if you use short variable names like 'id'
+
+# Rules to enforce
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - sorted_first_last
+  - use_where
+
+# Exclude certain files and directories from linting
+excluded:
+  - Carthage
+  - Pods
+  - fastlane
+  - .build
+  - Tests # exclude if you don't want to lint your test files
+  - Sources/External # assuming you have external sources to exclude
+
+# Include certain directories if needed
+included:
+  - Sources/EasyLoggingSDK
+
+# Customize rule configuration
+line_length:
+  warning: 120
+  error: 150
+  ignores_comments: true
+  ignores_urls: true
+
+type_body_length:
+  warning: 200
+  error: 300
+  ignores_comments: true
+  ignores_empty_lines: true
+
+file_length:
+  warning: 400
+  error: 600
+  ignores_comments: true
+  ignores_empty_lines: true
+
+identifier_name:
+  min_length: 3
+  max_length: 40
+  excluded: # list of identifiers that are allowed to be short
+    - id
+    - x
+    - y
+    - z
+
+# Configure the reporter type
+reporter: "xcode" # available options: xcode, json, csv, checkstyle, junit, html, emoji, sonarqube
+
+# Customize severity of rules
+custom_rules:
+  redundant_nil_coalescing:
+    included: ".*.swift"
+    name: "Redundant nil coalescing"
+    regex: "\\?\\? nil"
+    message: "Redundant nil coalescing found"
+    severity: warning
+
