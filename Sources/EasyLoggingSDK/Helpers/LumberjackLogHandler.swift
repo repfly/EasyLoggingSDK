@@ -6,38 +6,107 @@
 //
 
 import Logging
+import CocoaLumberjack
 
-struct LumberjackLogHandler: LogHandler {
-    private let easyLogger: EasyLogger
-    var logLevel: Logger.Level = .info
-    var metadata: Logger.Metadata = [:]
-
-    init(label: String) {
-        self.easyLogger = EasyLogger.shared
+/// A logging backend that writes to CocoaLumberjack
+public struct LumberjackLogHandler: Logging.LogHandler {
+    private let label: String
+    private var _metadata: Logging.Logger.Metadata
+    private var _logLevel: Logging.Logger.Level
+    
+    public init(label: String, minimumLogLevel: LogLevel = .debug) {
+        self.label = label
+        self._metadata = [:]
+        self._logLevel = minimumLogLevel.toSwiftLogLevel()
     }
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { return metadata[key] }
-        set { metadata[key] = newValue }
+    
+    // MARK: - LogHandler Protocol
+    
+    public var logLevel: Logging.Logger.Level {
+        get { _logLevel }
+        set { _logLevel = newValue }
     }
+    
+    public var metadata: Logging.Logger.Metadata {
+        get { _metadata }
+        set { _metadata = newValue }
+    }
+    
+    public subscript(metadataKey metadataKey: String) -> Logging.Logger.Metadata.Value? {
+        get { _metadata[metadataKey] }
+        set { _metadata[metadataKey] = newValue }
+    }
+    
+    public func log(
+        level: Logging.Logger.Level,
+        message: Logging.Logger.Message,
+        metadata: Logging.Logger.Metadata?,
+        source: String,
+        file: String,
+        function: String,
+        line: UInt
+    ) {
+        let combinedMetadata = metadata?.merging(_metadata) { _, new in new } ?? _metadata
+        let prettyMetadata = prettify(combinedMetadata)
+        let logMessage = "\(message)\(prettyMetadata.map { " \($0)" } ?? "")"
+        
+        let ddLogLevel = level.toDDLogLevel()
+        let flag = level.toDDLogFlag()
+        
+        // Using va_list since DDLog.log expects a va_list for the arguments
+        withVaList([logMessage as NSString]) { args in
+            DDLog.log(
+                asynchronous: true,
+                level: ddLogLevel,
+                flag: flag,
+                context: 0,
+                file: file,
+                function: function,
+                line: line,
+                tag: label,
+                format: "%@",
+                arguments: args
+            )
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func prettify(_ metadata: Logging.Logger.Metadata) -> String? {
+        guard !metadata.isEmpty else { return nil }
+        return metadata.map { "[\($0):\($1)]" }.joined(separator: " ")
+    }
+}
 
-    func log(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?, file: String, function: String, line: UInt) {
-        let logLevel = LogLevel(from: level)
-        let logMessage = "\(message)"
-        easyLogger.log(logMessage, level: logLevel, file: file, function: function, line: Int(line))
+// MARK: - Level Conversion Extensions
+
+private extension Logging.Logger.Level {
+    func toDDLogLevel() -> DDLogLevel {
+        switch self {
+        case .trace, .debug: return .debug
+        case .info: return .info
+        case .notice, .warning: return .warning
+        case .error, .critical: return .error
+        }
+    }
+    
+    func toDDLogFlag() -> DDLogFlag {
+        switch self {
+        case .trace, .debug: return .debug
+        case .info: return .info
+        case .notice, .warning: return .warning
+        case .error, .critical: return .error
+        }
     }
 }
 
 private extension LogLevel {
-    init(from swiftLogLevel: Logger.Level) {
-        switch swiftLogLevel {
-        case .trace: self = .debug
-        case .debug: self = .debug
-        case .info: self = .info
-        case .notice: self = .info
-        case .warning: self = .warning
-        case .error: self = .error
-        case .critical: self = .error
+    func toSwiftLogLevel() -> Logging.Logger.Level {
+        switch self {
+        case .debug: return .debug
+        case .info: return .info
+        case .warning: return .warning
+        case .error: return .error
         }
     }
 }
