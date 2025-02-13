@@ -1,3 +1,10 @@
+//
+//  ScreenTimeTracker.swift
+//
+//
+//  Created by Yildirim, Alper on 12.02.2025.
+//
+
 import Foundation
 import UIKit
 import QuartzCore
@@ -6,7 +13,7 @@ import QuartzCore
 final class ScreenTimeTracker {
     private var screenTimings: [String: CFTimeInterval] = [:]
     private let queue = DispatchQueue(
-        label: "com.easylogging.sdk.screentracker",
+        label: LoggingConstants.QueueIdentifier.screenTracker,
         qos: .utility
     )
     

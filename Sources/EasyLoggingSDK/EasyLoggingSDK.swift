@@ -9,24 +9,51 @@ public final class EasyLogger {
     // MARK: - Singleton
     
     public static let shared = EasyLogger()
-    
+
     // MARK: - Properties
     
-    private let queue = DispatchQueue(label: "com.easylogging.sdk", qos: .utility)
-    private let crashFlagKey = "com.easylogging.sdk.crashFlag"
+    private let queue = DispatchQueue(label: LoggingConstants.QueueIdentifier.main, qos: .utility)
+    private let crashFlagKey = LoggingConstants.UserDefaultsKey.crashFlag
+    private let environmentKey = LoggingConstants.UserDefaultsKey.environment
     private var configuration: Configuration
     private var fileLogger: DDFileLogger?
     private var shakeGestureWindow: UIWindow?
     private let screenTimeTracker = ScreenTimeTracker()
+    private var currentEnvironment: Environment
+    private lazy var memoryLeakDetector = MemoryLeakDetector(logger: self)
     
     // MARK: - Initialization
-    
+
     private init() {
-        self.configuration = Configuration()
+        // Load environment from UserDefaults or default to development
+        let savedEnvironment = UserDefaults.standard.string(forKey: environmentKey)
+        self.currentEnvironment = Environment(rawValue: savedEnvironment ?? "") ?? .development
+        self.configuration = currentEnvironment.defaultConfiguration
         initializeLogger()
     }
     
     // MARK: - Configuration
+    
+    /// Sets up the logger for a specific environment
+    /// - Parameter environment: The environment to configure for
+    /// - Parameter customConfiguration: Optional custom configuration to override environment defaults
+    public func setupEnvironment(_ environment: Environment, customConfiguration: Configuration? = nil) {
+        queue.sync {
+            currentEnvironment = environment
+            UserDefaults.standard.set(environment.rawValue, forKey: environmentKey)
+            
+            if let customConfig = customConfiguration {
+                configure(customConfig)
+            } else {
+                configure(environment.defaultConfiguration)
+            }
+        }
+    }
+    
+    /// Returns the current environment
+    public var environment: Environment {
+        queue.sync { currentEnvironment }
+    }
     
     /// Configuration options for EasyLogger
     public struct Configuration {
@@ -43,21 +70,25 @@ public final class EasyLogger {
         /// Whether to track screen loading times
         public var trackScreenLoadingTimes: Bool = false
         /// Threshold in seconds for slow screen loading warning
-        public var slowScreenLoadingThreshold: TimeInterval = 1.0
+        public var slowScreenLoadingThreshold: TimeInterval = LoggingConstants.Defaults.slowScreenLoadingThreshold
         /// Custom title for the share dialog
-        public var shareDialogTitle: String = "Share Logs"
+        public var shareDialogTitle: String = LoggingConstants.Defaults.shareDialogTitle
         /// Custom message for the share dialog
-        public var shareDialogMessage: String = "Would you like to share the log files?"
+        public var shareDialogMessage: String = LoggingConstants.Defaults.shareDialogMessage
         /// Maximum log file size in bytes (default: 5MB)
-        public var maxFileSize: UInt64 = 5_000_000
+        public var maxFileSize: UInt64 = LoggingConstants.Defaults.maxFileSize
         /// Maximum number of log files to keep
-        public var maxLogFiles: UInt = 7
+        public var maxLogFiles: UInt = LoggingConstants.Defaults.maxLogFiles
         /// Log format template
         public var logFormat: LogFormat = .default
         /// Directory where log files are stored
         public var logsDirectory: String?
         /// Whether to use automatic screen time tracking via method swizzling
         public var useAutomaticScreenTimeTracking: Bool = true
+        /// Whether to enable memory leak detection
+        public var enableMemoryLeakDetection: Bool = false
+        /// Interval in seconds to check for memory leaks
+        public var memoryLeakCheckInterval: TimeInterval = LoggingConstants.TimeInterval.defaultLeakCheckInterval
         
         public init() {}
     }
@@ -67,6 +98,9 @@ public final class EasyLogger {
         queue.sync {
             let wasTrackingEnabled = self.configuration.trackScreenLoadingTimes && self.configuration.useAutomaticScreenTimeTracking
             let willBeTrackingEnabled = configuration.trackScreenLoadingTimes && configuration.useAutomaticScreenTimeTracking
+            
+            let wasLeakDetectionEnabled = self.configuration.enableMemoryLeakDetection
+            let willBeLeakDetectionEnabled = configuration.enableMemoryLeakDetection
             
             self.configuration = configuration
             resetLoggers()
@@ -78,6 +112,14 @@ public final class EasyLogger {
             } else if wasTrackingEnabled && !willBeTrackingEnabled {
                 UIViewController.tearDownScreenTimeTracking()
             }
+            
+            // Handle memory leak detection
+            if !wasLeakDetectionEnabled && willBeLeakDetectionEnabled {
+                memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: configuration.memoryLeakCheckInterval)
+                memoryLeakDetector.startMonitoring()
+            } else if wasLeakDetectionEnabled && !willBeLeakDetectionEnabled {
+                memoryLeakDetector.stopMonitoring()
+            }
         }
     }
     
@@ -87,7 +129,7 @@ public final class EasyLogger {
         setupConsoleLogging()
         setupFileLogging()
         setupCrashDetection()
-        
+
         LoggingSystem.bootstrap { label in
             LumberjackLogHandler(label: label, minimumLogLevel: self.configuration.minimumLogLevel)
         }
@@ -121,7 +163,7 @@ public final class EasyLogger {
         DDLog.removeAllLoggers()
         fileLogger = nil
     }
-    
+
     // MARK: - Crash Detection
     
     private func setupCrashDetection() {
@@ -130,7 +172,7 @@ public final class EasyLogger {
         setUncaughtExceptionHandler()
         detectPreviousCrash()
     }
-    
+
     private func setUncaughtExceptionHandler() {
         NSSetUncaughtExceptionHandler { exception in
             EasyLogger.handleException(exception)
@@ -144,34 +186,29 @@ public final class EasyLogger {
         let name = exception.name.rawValue
         let reason = exception.reason ?? "No reason provided"
         
-        let crashReport = """
-            🚨 CRASH DETECTED 🚨
-            Exception: \(name)
-            Reason: \(reason)
-            Stack Trace:
-            \(stack)
-            """
+        let crashReport = String(format: LoggingConstants.LogMessage.CrashDetection.crashDetected,
+                               name, reason, stack)
         
         logger.log(crashReport, level: .error)
         UserDefaults.standard.set(true, forKey: logger.crashFlagKey)
         UserDefaults.standard.synchronize()
     }
-    
+
     private func detectPreviousCrash() {
         if UserDefaults.standard.bool(forKey: crashFlagKey) {
-            log("⚠️ App crashed in the previous session", level: .error)
+            log(LoggingConstants.LogMessage.CrashDetection.previousCrash, level: .error)
             UserDefaults.standard.set(false, forKey: crashFlagKey)
             UserDefaults.standard.synchronize()
         }
     }
-    
+
     // MARK: - Logging
-    
+
     /// Logs a message with the specified level and metadata
     public func log(
         _ message: @autoclosure () -> String,
         level: LogLevel = .info,
-        metadata: [String: String]? = nil,
+        metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -185,7 +222,7 @@ public final class EasyLogger {
             let formattedMessage = self.configuration.logFormat.format(
                 message: messageString,
                 level: level,
-                metadata: metadata,
+                metadata: metadata?.mapValues { String(describing: $0) },
                 file: file,
                 function: function,
                 line: line
@@ -213,7 +250,7 @@ public final class EasyLogger {
     
     public func debug(
         _ message: @autoclosure () -> String,
-        metadata: [String: String]? = nil,
+        metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -230,7 +267,7 @@ public final class EasyLogger {
     
     public func info(
         _ message: @autoclosure () -> String,
-        metadata: [String: String]? = nil,
+        metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -247,7 +284,7 @@ public final class EasyLogger {
     
     public func warning(
         _ message: @autoclosure () -> String,
-        metadata: [String: String]? = nil,
+        metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -264,7 +301,7 @@ public final class EasyLogger {
     
     public func error(
         _ message: @autoclosure () -> String,
-        metadata: [String: String]? = nil,
+        metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -329,9 +366,10 @@ public final class EasyLogger {
                 self.fileLogger?.rollLogFile(withCompletion: nil)
                 
                 // Log the cleanup
-                self.debug("All log files have been removed")
+                self.debug(LoggingConstants.LogMessage.FileManagement.removalSuccess)
             } catch {
-                self.error("Failed to remove log files: \(error.localizedDescription)")
+                self.error(String(format: LoggingConstants.LogMessage.FileManagement.removalError,
+                                error.localizedDescription))
             }
         }
     }
@@ -440,9 +478,9 @@ public final class EasyLogger {
         
         let screenName = String(describing: type(of: viewController))
         let metadata = [
-            "screen": screenName,
-            "duration": String(format: "%.3f", duration),
-            "tracking_method": configuration.useAutomaticScreenTimeTracking ? "automatic" : "manual"
+            LoggingConstants.MetadataKey.screen: screenName,
+            LoggingConstants.MetadataKey.duration: String(format: "%.3f", duration),
+            LoggingConstants.MetadataKey.trackingMethod: configuration.useAutomaticScreenTimeTracking ? "automatic" : "manual"
         ]
         
         if duration >= configuration.slowScreenLoadingThreshold {
@@ -455,6 +493,24 @@ public final class EasyLogger {
     /// Clear all screen time tracking data
     public func clearScreenTimeTracking() {
         screenTimeTracker.clearTracking()
+    }
+    
+    // MARK: - Memory Leak Detection
+    
+    /// Start monitoring an object for potential memory leaks
+    /// - Parameters:
+    ///   - target: The object to monitor
+    ///   - identifier: Optional custom identifier for the object
+    public func monitorForLeaks(_ target: AnyObject, identifier: String? = nil) {
+        guard configuration.enableMemoryLeakDetection else { return }
+        memoryLeakDetector.addTarget(target, identifier: identifier)
+    }
+    
+    /// Stop monitoring an object for memory leaks
+    /// - Parameter target: The object to stop monitoring
+    public func stopMonitoringForLeaks(_ target: AnyObject) {
+        guard configuration.enableMemoryLeakDetection else { return }
+        memoryLeakDetector.removeTarget(target)
     }
 }
 

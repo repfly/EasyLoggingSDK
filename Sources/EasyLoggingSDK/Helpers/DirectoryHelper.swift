@@ -9,15 +9,12 @@ import Foundation
 
 /// Helper class for managing log directories
 enum DirectoryHelper {
-    /// Default directory name for logs
-    private static let defaultLogDirectory = "EasyLoggingSDK/Logs"
-    
     /// Returns the directory path for storing log files
     /// - Returns: The path to the log directory
     static func getLogDirectory() -> String {
         let fileManager = FileManager.default
         let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        var logDirectory = cachesDirectory.appendingPathComponent(defaultLogDirectory)
+        var logDirectory = cachesDirectory.appendingPathComponent(LoggingConstants.FileSystem.defaultLogDirectory)
         
         do {
             if !fileManager.fileExists(atPath: logDirectory.path) {
@@ -35,7 +32,7 @@ enum DirectoryHelper {
             return logDirectory.path
         } catch {
             let tempDirectory = NSTemporaryDirectory()
-            let fallbackPath = (tempDirectory as NSString).appendingPathComponent(defaultLogDirectory)
+            let fallbackPath = (tempDirectory as NSString).appendingPathComponent(LoggingConstants.FileSystem.defaultLogDirectory)
             
             try? fileManager.createDirectory(
                 atPath: fallbackPath,
