@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 @available(iOS 13.0, *)
 public extension EasyLogger {
@@ -21,7 +22,7 @@ public extension EasyLogger {
     /// Asynchronously removes all log files
     func removeAllLogFilesAsync() async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            self.performOnInternalQueue {
                 self.removeAllLogFiles()
                 continuation.resume()
             }
@@ -125,7 +126,7 @@ public extension EasyLogger {
     /// Asynchronously starts monitoring an object for memory leaks
     func monitorForLeaksAsync(_ target: AnyObject, identifier: String? = nil) async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            self.performOnInternalQueue {
                 self.monitorForLeaks(target, identifier: identifier)
                 continuation.resume()
             }
@@ -135,7 +136,7 @@ public extension EasyLogger {
     /// Asynchronously stops monitoring an object for memory leaks
     func stopMonitoringForLeaksAsync(_ target: AnyObject) async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            self.performOnInternalQueue {
                 self.stopMonitoringForLeaks(target)
                 continuation.resume()
             }
@@ -145,7 +146,7 @@ public extension EasyLogger {
     /// Asynchronously tracks screen appearance
     func trackScreenAppearanceAsync(_ viewController: UIViewController) async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            self.performOnInternalQueue {
                 self.trackScreenAppearance(viewController)
                 continuation.resume()
             }
@@ -155,8 +156,9 @@ public extension EasyLogger {
     /// Asynchronously ends screen tracking and returns the duration
     func endScreenTrackingAsync(_ viewController: UIViewController) async -> TimeInterval? {
         await withCheckedContinuation { continuation in
-            queue.async {
-                let duration = self.screenTimeTracker.endScreenTracking(viewController)
+            self.performOnInternalQueue {
+                // Use the renamed internal method
+                let duration = self.getScreenTrackingDuration(viewController)
                 continuation.resume(returning: duration)
             }
         }
@@ -165,7 +167,7 @@ public extension EasyLogger {
     /// Asynchronously clears all screen time tracking data
     func clearScreenTrackingAsync() async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            self.performOnInternalQueue {
                 self.clearScreenTimeTracking()
                 continuation.resume()
             }
@@ -175,7 +177,7 @@ public extension EasyLogger {
     /// Asynchronously configures the logger
     func configureAsync(_ configuration: Configuration) async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            self.performOnInternalQueue {
                 self.configure(configuration)
                 continuation.resume()
             }
@@ -188,7 +190,7 @@ public extension EasyLogger {
         customConfiguration: Configuration? = nil
     ) async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            self.performOnInternalQueue {
                 self.setupEnvironment(environment, customConfiguration: customConfiguration)
                 continuation.resume()
             }
