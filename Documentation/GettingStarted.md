@@ -14,7 +14,7 @@ Or add it to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "YOUR_REPOSITORY_URL", from: "1.0.0")
+    .package(url: "https://github.com/repfly/EasyLoggingSDK", from: "1.0.1")
 ]
 ```
 
