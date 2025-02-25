@@ -34,56 +34,56 @@ logger.configure(minimumLogLevel: .debug,
                 shouldLogToFile: true)
 ```
 
-+### Environment-Based Configuration
-+
-+EasyLoggingSDK supports different logging configurations based on your app's environment:
-+
-+```swift
-+// Use default environment configuration
-+logger.setupEnvironment(.development)
-+
-+// Or use custom configuration for an environment
-+var customConfig = EasyLogger.Configuration()
-+customConfig.minimumLogLevel = .debug
-+customConfig.shouldLogToConsole = true
-+logger.setupEnvironment(.staging, customConfiguration: customConfig)
-+```
-+
-+#### Available Environments
-+
-+1. **Development** (.development)
-+   - Debug level logging
-+   - Console and file logging enabled
-+   - Shake to share enabled
-+   - Detailed log format
-+   - 10MB max file size
-+
-+2. **Staging** (.staging)
-+   - Info level logging
-+   - Console and file logging enabled
-+   - Shake to share enabled
-+   - Default log format
-+   - 5MB max file size
-+
-+3. **Production** (.production)
-+   - Warning level logging
-+   - File logging only
-+   - Shake to share disabled
-+   - Simple log format
-+   - 2MB max file size
-+
-+4. **Custom** (.custom)
-+   - Fully customizable configuration
-+
-+The environment setting persists across app launches and can be checked at any time:
-+
-+```swift
-+// Check current environment
-+if logger.environment == .production {
-+    // Production-specific code
-+}
-+```
-+
+### Environment-Based Configuration
+
+EasyLoggingSDK supports different logging configurations based on your app's environment:
+
+```swift
+// Use default environment configuration
+logger.setupEnvironment(.development)
+
+// Or use custom configuration for an environment
+var customConfig = EasyLogger.Configuration()
+customConfig.minimumLogLevel = .debug
+customConfig.shouldLogToConsole = true
+logger.setupEnvironment(.staging, customConfiguration: customConfig)
+```
+
+#### Available Environments
+
+1. **Development** (.development)
+   - Debug level logging
+   - Console and file logging enabled
+   - Shake to share enabled
+   - Detailed log format
+   - 10MB max file size
+
+2. **Staging** (.staging)
+   - Info level logging
+   - Console and file logging enabled
+   - Shake to share enabled
+   - Default log format
+   - 5MB max file size
+
+3. **Production** (.production)
+   - Warning level logging
+   - File logging only
+   - Shake to share disabled
+   - Simple log format
+   - 2MB max file size
+
+4. **Custom** (.custom)
+   - Fully customizable configuration
+
+The environment setting persists across app launches and can be checked at any time:
+
+```swift
+// Check current environment
+if logger.environment == .production {
+    // Production-specific code
+}
+```
+
 ### Logging Messages
 
 ```swift
@@ -124,47 +124,47 @@ logger.rotateLogFile()
 
 Monitor your app's screen loading performance. The SDK supports both automatic and manual tracking:
 
-+#### Memory Leak Detection
-+
-+The SDK includes a powerful memory leak detection system that can help identify potential retain cycles and memory leaks:
-+
-+```swift
-+// Enable memory leak detection in configuration
-+var config = EasyLogger.Configuration()
-+config.enableMemoryLeakDetection = true
-+config.memoryLeakCheckInterval = 5.0 // Check every 5 seconds
-+logger.configure(config)
-+
-+// Monitor specific objects
-+class MyViewController: UIViewController {
-+    override func viewDidLoad() {
-+        super.viewDidLoad()
-+        EasyLogger.shared.monitorForLeaks(self)
-+    }
-+    
-+    deinit {
-+        EasyLogger.shared.stopMonitoringForLeaks(self)
-+    }
-+}
-+```
-+
-+The memory leak detector will:
-+- Monitor objects for proper deallocation
-+- Detect view controllers that might be retained after dismissal
-+- Provide detailed logs with object lifecycle information
-+- Include memory addresses and retain cycle hints
-+
-+Example log output:
-+```
-+[WARNING] Potential memory leak detected [object_type:MyViewController] [lifetime:65.32 seconds] [address:0x7f8c2e70b600]
-+[DEBUG] View Controller details [parent:nil] [presenting:nil] [presented:nil] [has_window:false]
-+```
-+
-+Memory leak detection is:
-+- Enabled by default in development environment
-+- Enabled with longer intervals in staging
-+- Disabled in production for performance
-+
+#### Memory Leak Detection
+
+The SDK includes a powerful memory leak detection system that can help identify potential retain cycles and memory leaks:
+
+```swift
+// Enable memory leak detection in configuration
+var config = EasyLogger.Configuration()
+config.enableMemoryLeakDetection = true
+config.memoryLeakCheckInterval = 5.0 // Check every 5 seconds
+logger.configure(config)
+
+// Monitor specific objects
+class MyViewController: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        EasyLogger.shared.monitorForLeaks(self)
+    }
+    
+    deinit {
+        EasyLogger.shared.stopMonitoringForLeaks(self)
+    }
+}
+```
+
+The memory leak detector will:
+- Monitor objects for proper deallocation
+- Detect view controllers that might be retained after dismissal
+- Provide detailed logs with object lifecycle information
+- Include memory addresses and retain cycle hints
+
+Example log output:
+```
+[WARNING] Potential memory leak detected [object_type:MyViewController] [lifetime:65.32 seconds] [address:0x7f8c2e70b600]
+[DEBUG] View Controller details [parent:nil] [presenting:nil] [presented:nil] [has_window:false]
+```
+
+Memory leak detection is:
+- Enabled by default in development environment
+- Enabled with longer intervals in staging
+- Disabled in production for performance
+
 ##### Automatic Tracking (Recommended)
 
 ```swift
@@ -222,37 +222,37 @@ Example log output:
 [WARNING] Slow screen loading detected [screen:SlowViewController] [duration:1.543] [tracking_method:automatic]
 ```
 
-+### Async/Await Support
-+
-+For iOS 13.0 and later, EasyLoggingSDK provides async/await support for all major operations:
-+
-+```swift
-+// Async logging
-+await logger.debugAsync("Debug message")
-+await logger.infoAsync("Info message")
-+await logger.warningAsync("Warning message")
-+await logger.errorAsync("Error message")
-+
-+// Async configuration
-+await logger.setupEnvironmentAsync(.development)
-+
-+// Async file management
-+await logger.rotateLogFileAsync()
-+await logger.removeAllLogFilesAsync()
-+
-+// Async memory leak detection
-+await logger.monitorForLeaksAsync(object)
-+await logger.stopMonitoringForLeaksAsync(object)
-+
-+// Async screen time tracking
-+await logger.trackScreenAppearanceAsync(viewController)
-+if let duration = await logger.endScreenTrackingAsync(viewController) {
-+    print("Screen loaded in \(duration) seconds")
-+}
-+```
-+
-+The async API provides the same functionality as the synchronous API but with better integration into modern Swift concurrency patterns. Legacy completion-based APIs are still available for backward compatibility.
-+
+### Async/Await Support
+
+For iOS 13.0 and later, EasyLoggingSDK provides async/await support for all major operations:
+
+```swift
+// Async logging
+await logger.debugAsync("Debug message")
+await logger.infoAsync("Info message")
+await logger.warningAsync("Warning message")
+await logger.errorAsync("Error message")
+
+// Async configuration
+await logger.setupEnvironmentAsync(.development)
+
+// Async file management
+await logger.rotateLogFileAsync()
+await logger.removeAllLogFilesAsync()
+
+// Async memory leak detection
+await logger.monitorForLeaksAsync(object)
+await logger.stopMonitoringForLeaksAsync(object)
+
+// Async screen time tracking
+await logger.trackScreenAppearanceAsync(viewController)
+if let duration = await logger.endScreenTrackingAsync(viewController) {
+    print("Screen loaded in \(duration) seconds")
+}
+```
+
+The async API provides the same functionality as the synchronous API but with better integration into modern Swift concurrency patterns. Legacy completion-based APIs are still available for backward compatibility.
+
 ## Best Practices
 
 1. **Log Levels**: Use appropriate log levels
