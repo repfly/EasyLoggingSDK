@@ -474,7 +474,7 @@ public final class EasyLogger {
     /// - Parameter viewController: The view controller to stop tracking
     public func endScreenTracking(_ viewController: UIViewController) {
         guard configuration.trackScreenLoadingTimes,
-              let duration = screenTimeTracker.endScreenTracking(viewController) else { return }
+              let duration = getScreenTrackingDuration(viewController) else { return }
         
         let screenName = String(describing: type(of: viewController))
         let metadata = [
@@ -511,6 +511,20 @@ public final class EasyLogger {
     public func stopMonitoringForLeaks(_ target: AnyObject) {
         guard configuration.enableMemoryLeakDetection else { return }
         memoryLeakDetector.removeTarget(target)
+    }
+
+    // MARK: - Internal Helpers
+    
+    /// Internal method to perform operations on the queue
+    internal func performOnInternalQueue(_ block: @escaping () -> Void) {
+        queue.async {
+            block()
+        }
+    }
+    
+    /// Internal method to end screen tracking and return the duration
+    internal func getScreenTrackingDuration(_ viewController: UIViewController) -> TimeInterval? {
+        return screenTimeTracker.endScreenTracking(viewController)
     }
 }
 
