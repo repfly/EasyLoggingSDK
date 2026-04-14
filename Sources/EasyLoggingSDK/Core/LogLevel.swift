@@ -7,13 +7,23 @@
 
 import CocoaLumberjack
 
-/// Represents different levels of logging
-public enum LogLevel: Int, Comparable {
+/// Represents different levels of logging, ordered by severity
+public enum LogLevel: Int, Comparable, Equatable, Sendable {
     case debug = 0
     case info = 1
     case warning = 2
     case error = 3
-    
+
+    /// String representation of the log level
+    public var stringValue: String {
+        switch self {
+        case .debug: return "debug"
+        case .info: return "info"
+        case .warning: return "warning"
+        case .error: return "error"
+        }
+    }
+
     /// The prefix to use in log messages
     public var logDescriptionPrefix: String {
         switch self {
@@ -55,7 +65,18 @@ public enum LogLevel: Int, Comparable {
         }
     }
     
-    // Implement Comparable
+    /// Create LogLevel from string (case insensitive)
+    public static func fromString(_ string: String) -> LogLevel? {
+        switch string.lowercased() {
+        case "debug": return .debug
+        case "info": return .info
+        case "warning": return .warning
+        case "error": return .error
+        default: return nil
+        }
+    }
+    
+    // Comparable based on severity (Int raw value)
     public static func < (lhs: LogLevel, rhs: LogLevel) -> Bool {
         lhs.rawValue < rhs.rawValue
     }

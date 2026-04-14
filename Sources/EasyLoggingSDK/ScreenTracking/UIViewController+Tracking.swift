@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 import ObjectiveC
 
@@ -111,4 +112,5 @@ extension UIViewController {
                self is UIAlertController ||
                self is UIActivityViewController
     }
-} 
+}
+#endif

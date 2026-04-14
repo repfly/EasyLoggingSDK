@@ -6,9 +6,8 @@
 //
 
 import Foundation
-import UIKit
 
-@available(iOS 13.0, *)
+@available(iOS 15.0, macOS 12.0, *)
 public extension EasyLogger {
     /// Asynchronously rotates the current log file
     func rotateLogFileAsync() async {
@@ -18,7 +17,7 @@ public extension EasyLogger {
             }
         }
     }
-    
+
     /// Asynchronously removes all log files
     func removeAllLogFilesAsync() async {
         await withCheckedContinuation { continuation in
@@ -28,7 +27,7 @@ public extension EasyLogger {
             }
         }
     }
-    
+
     /// Asynchronously logs a message with the specified level and metadata
     func logAsync(
         _ message: @autoclosure () -> String,
@@ -38,19 +37,22 @@ public extension EasyLogger {
         function: String = #function,
         line: Int = #line
     ) async {
+        let evaluatedMessage = message()
         await withCheckedContinuation { continuation in
-            log(
-                message(),
-                level: level,
-                metadata: metadata,
-                file: file,
-                function: function,
-                line: line
-            )
-            continuation.resume()
+            self.performOnInternalQueue {
+                self.log(
+                    evaluatedMessage,
+                    level: level,
+                    metadata: metadata,
+                    file: file,
+                    function: function,
+                    line: line
+                )
+                continuation.resume()
+            }
         }
     }
-    
+
     /// Asynchronously logs a debug message
     func debugAsync(
         _ message: @autoclosure () -> String,
@@ -68,7 +70,7 @@ public extension EasyLogger {
             line: line
         )
     }
-    
+
     /// Asynchronously logs an info message
     func infoAsync(
         _ message: @autoclosure () -> String,
@@ -86,7 +88,7 @@ public extension EasyLogger {
             line: line
         )
     }
-    
+
     /// Asynchronously logs a warning message
     func warningAsync(
         _ message: @autoclosure () -> String,
@@ -104,7 +106,7 @@ public extension EasyLogger {
             line: line
         )
     }
-    
+
     /// Asynchronously logs an error message
     func errorAsync(
         _ message: @autoclosure () -> String,
@@ -122,58 +124,7 @@ public extension EasyLogger {
             line: line
         )
     }
-    
-    /// Asynchronously starts monitoring an object for memory leaks
-    func monitorForLeaksAsync(_ target: AnyObject, identifier: String? = nil) async {
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                self.monitorForLeaks(target, identifier: identifier)
-                continuation.resume()
-            }
-        }
-    }
-    
-    /// Asynchronously stops monitoring an object for memory leaks
-    func stopMonitoringForLeaksAsync(_ target: AnyObject) async {
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                self.stopMonitoringForLeaks(target)
-                continuation.resume()
-            }
-        }
-    }
-    
-    /// Asynchronously tracks screen appearance
-    func trackScreenAppearanceAsync(_ viewController: UIViewController) async {
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                self.trackScreenAppearance(viewController)
-                continuation.resume()
-            }
-        }
-    }
-    
-    /// Asynchronously ends screen tracking and returns the duration
-    func endScreenTrackingAsync(_ viewController: UIViewController) async -> TimeInterval? {
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                // Use the renamed internal method
-                let duration = self.getScreenTrackingDuration(viewController)
-                continuation.resume(returning: duration)
-            }
-        }
-    }
-    
-    /// Asynchronously clears all screen time tracking data
-    func clearScreenTrackingAsync() async {
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                self.clearScreenTimeTracking()
-                continuation.resume()
-            }
-        }
-    }
-    
+
     /// Asynchronously configures the logger
     func configureAsync(_ configuration: Configuration) async {
         await withCheckedContinuation { continuation in
@@ -183,10 +134,10 @@ public extension EasyLogger {
             }
         }
     }
-    
+
     /// Asynchronously sets up the environment
     func setupEnvironmentAsync(
-        _ environment: Environment,
+        _ environment: LogEnvironment,
         customConfiguration: Configuration? = nil
     ) async {
         await withCheckedContinuation { continuation in
@@ -196,4 +147,4 @@ public extension EasyLogger {
             }
         }
     }
-} 
+}
