@@ -13,7 +13,9 @@ enum DirectoryHelper {
     /// - Returns: The path to the log directory
     static func getLogDirectory() -> String {
         let fileManager = FileManager.default
-        let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        guard let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            return NSTemporaryDirectory()
+        }
         var logDirectory = cachesDirectory.appendingPathComponent(LoggingConstants.FileSystem.defaultLogDirectory)
         
         do {

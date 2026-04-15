@@ -7,7 +7,7 @@
 import Foundation
 
 /// Defines the format of log messages
-public struct LogFormat {
+public struct LogFormat: Sendable {
     /// The template string used to format log messages
     private let template: String
     
@@ -29,17 +29,18 @@ public struct LogFormat {
         var result = template
         
         // Replace placeholders with actual values
-        let replacements: [String: String] = [
-            "%message": message,
-            "%level": level.logDescriptionPrefix,
-            "%levelRaw": String(level.rawValue),
-            "%file": (file as NSString).lastPathComponent,
-            "%function": function,
-            "%line": String(line),
-            "%date": ISO8601DateFormatter().string(from: Date()),
-            "%metadata": formatMetadata(metadata)
+        // Ordered longest-first to prevent %level from matching inside %levelRaw
+        let replacements: [(String, String)] = [
+            ("%metadata", formatMetadata(metadata)),
+            ("%message", message),
+            ("%levelRaw", level.stringValue),
+            ("%level", level.logDescriptionPrefix),
+            ("%function", function),
+            ("%file", (file as NSString).lastPathComponent),
+            ("%line", String(line)),
+            ("%date", ISO8601DateFormatter().string(from: Date()))
         ]
-        
+
         for (key, value) in replacements {
             result = result.replacingOccurrences(of: key, with: value)
         }
@@ -76,5 +77,10 @@ public extension LogFormat {
         template: """
         {"timestamp":"%date","level":"%levelRaw","file":"%file","line":%line,"function":"%function","message":"%message"}
         """
+    )
+    
+    /// Clean format for internal SDK logging: "[LEVEL] Message Metadata"
+    static let clean = LogFormat(
+        template: "[%level] %message %metadata"
     )
 }
