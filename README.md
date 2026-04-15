@@ -4,12 +4,12 @@ A Swift logging SDK that simplifies logging implementation in iOS applications b
 
 ## Features
 
-- Unified logging interface
-- Built on top of industry-standard logging frameworks
-- iOS 12.0+ support
-- Thread-safe logging
-- Multiple log levels (Debug, Info, Warning, Error)
-- Customizable log formatting
+- Unified logging interface built on industry-standard logging frameworks.
+- **Thread-Safe**: All logging and configuration operations are fully thread-safe.
+- **Automatic Lifecycle**: No-setup integration with the UIKit application lifecycle.
+- **SwiftUI Ready**: Core logger is platform-agnostic. Includes helpers for SwiftUI view tracking.
+- **Rich Feature Set**: Includes crash detection, file logging, screen time tracking, memory leak detection, and an in-app log viewer.
+- **Highly Configurable**: Customize log levels, formats, and features based on environments (e.g., development, staging, production).
 
 ## Installation
 
@@ -19,16 +19,18 @@ Add the following to your `Package.swift` file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/repfly/EasyLoggingSDK", from: "1.0.0")
+    .package(url: "https://github.com/repfly/EasyLoggingSDK", from: "2.0.0")
 ]
 ```
 
-## Usage
+Or add the package via Xcode's UI.
+
+## Basic Usage
 
 ```swift
 import EasyLoggingSDK
 
-// Initialize the logger
+// The SDK is automatically configured. Just get the shared instance and start logging.
 let logger = EasyLogger.shared
 
 // Log messages with different levels
@@ -40,9 +42,9 @@ logger.error("Error message")
 
 ## Requirements
 
-- iOS 12.0+
-- Swift 5.8+
-- Xcode 14.0+
+- iOS 15.0+
+- Swift 5.9+
+- Xcode 15.0+
 
 ## Dependencies
 
@@ -51,7 +53,7 @@ logger.error("Error message")
 
 ## Documentation
 
-For detailed documentation and examples, please visit the [documentation](./Documentation) directory.
+For detailed documentation and usage examples, including how to configure features like SwiftUI screen tracking, please visit the [documentation](./Documentation) directory.
 
 ## Contributing
 
@@ -63,4 +65,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a list of changes and version history. 
+See [CHANGELOG.md](CHANGELOG.md) for a list of changes and version history.

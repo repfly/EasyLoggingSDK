@@ -45,34 +45,31 @@ public enum LoggingConstants {
         public static let leakWarningInterval: Foundation.TimeInterval = 60.0
     }
     
-    /// Log messages
-    public enum LogMessage {
-        /// Memory leak related messages
-        public enum MemoryLeak {
-            public static let started = "Started monitoring object for memory leaks"
-            public static let detected = "Potential memory leak detected"
-            public static let multipleDetected = "Memory leaks detected. Consider investigating retain cycles."
-            public static let viewControllerDetails = "View Controller details"
-        }
-        
-        /// File management related messages
-        public enum FileManagement {
-            public static let rotationSuccess = "Log file rotated successfully"
-            public static let removalSuccess = "All log files have been removed"
-            public static let removalError = "Failed to remove log files: %@"
-        }
-        
-        /// Crash detection related messages
-        public enum CrashDetection {
-            public static let crashDetected = """
-                🚨 CRASH DETECTED 🚨
-                Exception: %@
-                Reason: %@
-                Stack Trace:
-                %@
-                """
-            public static let previousCrash = "⚠️ App crashed in the previous session"
-        }
+    /// Memory leak log messages
+    public enum MemoryLeakMessage {
+        public static let started = "Started monitoring object for memory leaks"
+        public static let detected = "Potential memory leak detected"
+        public static let multipleDetected = "Memory leaks detected. Consider investigating retain cycles."
+        public static let viewControllerDetails = "View Controller details"
+    }
+
+    /// File management log messages
+    public enum FileManagementMessage {
+        public static let rotationSuccess = "Log file rotated successfully"
+        public static let removalSuccess = "All log files have been removed"
+        public static let removalError = "Failed to remove log files: %@"
+    }
+
+    /// Crash detection log messages
+    public enum CrashDetectionMessage {
+        public static let crashDetected = """
+            🚨 CRASH DETECTED 🚨
+            Exception: %@
+            Reason: %@
+            Stack Trace:
+            %@
+            """
+        public static let previousCrash = "⚠️ App crashed in the previous session"
     }
     
     /// Metadata keys

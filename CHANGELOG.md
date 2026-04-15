@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2025-08-10
+
+### Added
+- **Thread Safety**: All SDK operations are now fully thread-safe, preventing race conditions and ensuring stability in concurrent environments.
+- **SwiftUI Support**: Added screen time tracking for SwiftUI views via `trackViewAppearance(name:)` and `endViewTracking(name:)`.
+- **Automatic Lifecycle Management**: The SDK now automatically hooks into the `UIKit` application lifecycle, removing the need for manual setup in the `AppDelegate`.
+
+### Changed
+- **Decoupled from UIKit**: The core logging engine is now independent of `UIKit`, allowing it to be used in non-UI applications (e.g., server-side Swift, command-line tools).
+- **Modular UI Components**: `UIKit`-specific features (Lifecycle Management, Shake-to-Share) have been moved into separate, self-contained components.
+- **ScreenTimeTracker**: The helper class was refactored to support both `UIKit` and `SwiftUI` tracking paradigms.
+
+### Removed
+- The requirement to manually call `applicationDidFinishLaunching()` and `applicationWillTerminate()` from the `AppDelegate`.
+
+## [1.0.3] - 2025-08-09
 
 ### Added
 - Initial SDK setup
@@ -47,18 +62,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Foundation object support
   - Collection type support
   - Error object support
-
-### Changed
-- None
-
-### Deprecated
-- None
-
-### Removed
-- None
-
-### Fixed
-- None
-
-### Security
-- None 
