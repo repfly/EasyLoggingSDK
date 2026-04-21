@@ -34,6 +34,7 @@ public final class InAppLogViewer {
         let timestamp: Date
         let level: LogLevel
         let message: String
+        let category: String?
         let metadata: [String: String]?
         let source: LogSource
         
@@ -108,13 +109,14 @@ public final class InAppLogViewer {
     ///   - message: The log message
     ///   - level: The log level
     ///   - metadata: Optional metadata associated with the log
-    func addLogEntry(message: String, level: LogLevel, metadata: [String: String]? = nil) {
+    func addLogEntry(message: String, level: LogLevel, category: String? = nil, metadata: [String: String]? = nil) {
         guard isEnabled else { return }
         
         let entry = LogEntry(
             timestamp: Date(),
             level: level,
             message: message,
+            category: category,
             metadata: metadata,
             source: .memory
         )
@@ -212,13 +214,14 @@ extension InAppLogViewer {
             timestamp: timestamp,
             level: level,
             message: message,
+            category: nil,
             metadata: nil,
             source: .file
         )
     }
     
     /// Get all log entries (memory + files) with optional filtering
-    func getAllLogEntries(searchText: String? = nil, levels: Set<LogLevel>? = nil) -> [LogEntry] {
+    func getAllLogEntries(searchText: String? = nil, levels: Set<LogLevel>? = nil, category: String? = nil) -> [LogEntry] {
         // Combine memory and file entries
         var allEntries: [LogEntry] = []
         
@@ -244,11 +247,17 @@ extension InAppLogViewer {
             filteredEntries = filteredEntries.filter { levels.contains($0.level) }
         }
         
+        // Filter by category
+        if let category = category, !category.isEmpty {
+            filteredEntries = filteredEntries.filter { $0.category == category }
+        }
+
         // Filter by search text
         if let searchText = searchText, !searchText.isEmpty {
             filteredEntries = filteredEntries.filter { entry in
                 entry.message.localizedCaseInsensitiveContains(searchText) ||
                 entry.level.stringValue.localizedCaseInsensitiveContains(searchText) ||
+                (entry.category?.localizedCaseInsensitiveContains(searchText) ?? false) ||
                 (entry.metadata?.values.contains { $0.localizedCaseInsensitiveContains(searchText) } ?? false)
             }
         }

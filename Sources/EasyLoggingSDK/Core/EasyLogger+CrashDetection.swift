@@ -85,6 +85,7 @@ extension EasyLogger {
             message: crashReport,
             level: .error,
             metadata: nil,
+            category: "crash",
             file: #file,
             function: #function,
             line: #line

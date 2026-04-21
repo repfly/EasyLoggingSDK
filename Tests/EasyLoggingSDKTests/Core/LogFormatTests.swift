@@ -10,6 +10,7 @@ final class LogFormatTests: XCTestCase {
             message: "Test message",
             level: .info,
             metadata: nil,
+            category: nil,
             file: "TestFile.swift",
             function: "testFunc()",
             line: 42
@@ -29,6 +30,7 @@ final class LogFormatTests: XCTestCase {
             message: "Hello",
             level: .debug,
             metadata: nil,
+            category: nil,
             file: "",
             function: "",
             line: 0
@@ -46,6 +48,7 @@ final class LogFormatTests: XCTestCase {
             message: "Detailed test",
             level: .warning,
             metadata: nil,
+            category: nil,
             file: "File.swift",
             function: "func()",
             line: 1
@@ -65,6 +68,7 @@ final class LogFormatTests: XCTestCase {
             message: "JSON test",
             level: .error,
             metadata: nil,
+            category: nil,
             file: "Test.swift",
             function: "testJSON()",
             line: 10
@@ -84,6 +88,7 @@ final class LogFormatTests: XCTestCase {
             message: "Clean test",
             level: .info,
             metadata: nil,
+            category: nil,
             file: "SomeFile.swift",
             function: "someFunc()",
             line: 99
@@ -102,6 +107,7 @@ final class LogFormatTests: XCTestCase {
             message: "Meta test",
             level: .debug,
             metadata: metadata,
+            category: nil,
             file: "File.swift",
             function: "f()",
             line: 1
@@ -115,6 +121,7 @@ final class LogFormatTests: XCTestCase {
             message: "No metadata",
             level: .info,
             metadata: [:],
+            category: nil,
             file: "File.swift",
             function: "f()",
             line: 1
@@ -128,6 +135,7 @@ final class LogFormatTests: XCTestCase {
             message: "Nil metadata",
             level: .info,
             metadata: nil,
+            category: nil,
             file: "File.swift",
             function: "f()",
             line: 1
@@ -144,6 +152,7 @@ final class LogFormatTests: XCTestCase {
             message: "Custom",
             level: .error,
             metadata: nil,
+            category: nil,
             file: "",
             function: "",
             line: 0
@@ -162,6 +171,7 @@ final class LogFormatTests: XCTestCase {
             message: "",
             level: .warning,
             metadata: nil,
+            category: nil,
             file: "",
             function: "",
             line: 0
@@ -177,6 +187,7 @@ final class LogFormatTests: XCTestCase {
             message: "test",
             level: .info,
             metadata: nil,
+            category: nil,
             file: "/Users/dev/project/Sources/MyFile.swift",
             function: "f()",
             line: 1
@@ -184,5 +195,37 @@ final class LogFormatTests: XCTestCase {
 
         XCTAssertTrue(result.contains("MyFile.swift"))
         XCTAssertFalse(result.contains("/Users/dev"))
+    }
+
+    // MARK: - Category
+
+    func testCategoryPlaceholder() {
+        let format = LogFormat(template: "[%category] %message")
+        let result = format.format(
+            message: "test",
+            level: .info,
+            metadata: nil,
+            category: "networking",
+            file: "",
+            function: "",
+            line: 0
+        )
+
+        XCTAssertEqual(result, "[networking] test")
+    }
+
+    func testNilCategoryProducesEmptyString() {
+        let format = LogFormat(template: "[%category] %message")
+        let result = format.format(
+            message: "test",
+            level: .info,
+            metadata: nil,
+            category: nil,
+            file: "",
+            function: "",
+            line: 0
+        )
+
+        XCTAssertEqual(result, "[] test")
     }
 }

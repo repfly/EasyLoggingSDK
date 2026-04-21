@@ -172,6 +172,11 @@ public final class EasyLogger: @unchecked Sendable {
         /// Maximum number of in-memory log entries retained by the log viewer. Default: 1000.
         public var maxLogViewerEntries: Int = 1000
 
+        /// Enable automatic network request logging via ``NetworkLoggerURLProtocol``.
+        /// When `true`, ``networkLoggingSessionConfiguration()`` is available to create
+        /// a pre-configured `URLSessionConfiguration`.
+        public var enableNetworkLogging: Bool = false
+
         public init() {}
     }
 
@@ -225,18 +230,18 @@ public final class EasyLogger: @unchecked Sendable {
         #endif
     }
 
-    public func log(_ message: @autoclosure () -> String, level: LogLevel = .info, metadata: [String: Any]? = nil, file: String = #file, function: String = #function, line: Int = #line) {
+    public func log(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: [String: Any]? = nil, file: String = #file, function: String = #function, line: Int = #line) {
         // Get config outside the queue to avoid deadlock
         let config = self.configuration
         guard level >= config.minimumLogLevel else { return }
         
         let messageString = message()
         queue.async {
-            let formattedMessage = config.logFormat.format(message: messageString, level: level, metadata: metadata?.mapValues { String(describing: $0) }, file: file, function: function, line: line)
+            let formattedMessage = config.logFormat.format(message: messageString, level: level, metadata: metadata?.mapValues { String(describing: $0) }, category: category, file: file, function: function, line: line)
             
             #if canImport(UIKit)
             if config.enableInAppLogViewer {
-                self.logViewer.addLogEntry(message: messageString, level: level, metadata: metadata?.mapValues { String(describing: $0) })
+                self.logViewer.addLogEntry(message: messageString, level: level, category: category, metadata: metadata?.mapValues { String(describing: $0) })
             }
             #endif
             
@@ -246,12 +251,12 @@ public final class EasyLogger: @unchecked Sendable {
         }
     }
 
-    public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, metadata: T, file: String = #file, function: String = #function, line: Int = #line) {
+    public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: T, file: String = #file, function: String = #function, line: Int = #line) {
         let encodedMetadata = encodeCodableToMetadata(metadata)
-        log(message(), level: level, metadata: encodedMetadata, file: file, function: function, line: line)
+        log(message(), level: level, category: category, metadata: encodedMetadata, file: file, function: function, line: line)
     }
 
-    public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, metadata: [String: Any]?, codableMetadata: T, file: String = #file, function: String = #function, line: Int = #line) {
+    public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: [String: Any]?, codableMetadata: T, file: String = #file, function: String = #function, line: Int = #line) {
         var combinedMetadata = metadata ?? [:]
         let encodedCodable = encodeCodableToMetadata(codableMetadata)
         
@@ -260,7 +265,7 @@ public final class EasyLogger: @unchecked Sendable {
             combinedMetadata[key] = value
         }
         
-        log(message(), level: level, metadata: combinedMetadata, file: file, function: function, line: line)
+        log(message(), level: level, category: category, metadata: combinedMetadata, file: file, function: function, line: line)
     }
 
     func encodeCodableToMetadata<T: Codable>(_ codable: T) -> [String: Any] {
