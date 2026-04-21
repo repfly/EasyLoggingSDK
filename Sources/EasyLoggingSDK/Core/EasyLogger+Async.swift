@@ -32,6 +32,7 @@ public extension EasyLogger {
     func logAsync(
         _ message: @autoclosure () -> String,
         level: LogLevel = .info,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
@@ -43,6 +44,7 @@ public extension EasyLogger {
                 self.log(
                     evaluatedMessage,
                     level: level,
+                    category: category,
                     metadata: metadata,
                     file: file,
                     function: function,
@@ -56,6 +58,7 @@ public extension EasyLogger {
     /// Asynchronously logs a debug message
     func debugAsync(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
@@ -64,6 +67,7 @@ public extension EasyLogger {
         await logAsync(
             message(),
             level: .debug,
+            category: category,
             metadata: metadata,
             file: file,
             function: function,
@@ -74,6 +78,7 @@ public extension EasyLogger {
     /// Asynchronously logs an info message
     func infoAsync(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
@@ -82,6 +87,7 @@ public extension EasyLogger {
         await logAsync(
             message(),
             level: .info,
+            category: category,
             metadata: metadata,
             file: file,
             function: function,
@@ -92,6 +98,7 @@ public extension EasyLogger {
     /// Asynchronously logs a warning message
     func warningAsync(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
@@ -100,6 +107,7 @@ public extension EasyLogger {
         await logAsync(
             message(),
             level: .warning,
+            category: category,
             metadata: metadata,
             file: file,
             function: function,
@@ -110,6 +118,7 @@ public extension EasyLogger {
     /// Asynchronously logs an error message
     func errorAsync(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
@@ -118,6 +127,7 @@ public extension EasyLogger {
         await logAsync(
             message(),
             level: .error,
+            category: category,
             metadata: metadata,
             file: file,
             function: function,

@@ -10,6 +10,14 @@ import Foundation
 public struct LogFormat: Sendable {
     /// The template string used to format log messages
     private let template: String
+
+    /// Cached date formatter shared across all LogFormat instances (nonisolated(unsafe) is safe
+    /// because ISO8601DateFormatter is thread-safe and we never mutate the instance after creation).
+    nonisolated(unsafe) private static let iso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
     
     /// Creates a new log format with the specified template
     /// - Parameter template: The template string used to format log messages
@@ -22,6 +30,7 @@ public struct LogFormat: Sendable {
         message: String,
         level: LogLevel,
         metadata: [String: String]?,
+        category: String?,
         file: String,
         function: String,
         line: Int
@@ -31,6 +40,7 @@ public struct LogFormat: Sendable {
         // Replace placeholders with actual values
         // Ordered longest-first to prevent %level from matching inside %levelRaw
         let replacements: [(String, String)] = [
+            ("%category", category ?? ""),
             ("%metadata", formatMetadata(metadata)),
             ("%message", message),
             ("%levelRaw", level.stringValue),
@@ -38,7 +48,7 @@ public struct LogFormat: Sendable {
             ("%function", function),
             ("%file", (file as NSString).lastPathComponent),
             ("%line", String(line)),
-            ("%date", ISO8601DateFormatter().string(from: Date()))
+            ("%date", Self.iso8601Formatter.string(from: Date()))
         ]
 
         for (key, value) in replacements {

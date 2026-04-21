@@ -11,124 +11,140 @@ import Foundation
 public extension EasyLogger {
     func debug<T: Codable>(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: T,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .debug, metadata: metadata, file: file, function: function, line: line)
+        log(message(), level: .debug, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     func info<T: Codable>(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: T,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .info, metadata: metadata, file: file, function: function, line: line)
+        log(message(), level: .info, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     func warning<T: Codable>(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: T,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .warning, metadata: metadata, file: file, function: function, line: line)
+        log(message(), level: .warning, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     func error<T: Codable>(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: T,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .error, metadata: metadata, file: file, function: function, line: line)
+        log(message(), level: .error, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     func debug(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .debug, metadata: metadata, file: file, function: function, line: line)
+        log(message(), level: .debug, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     func info(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .info, metadata: metadata, file: file, function: function, line: line)
+        log(message(), level: .info, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     func warning(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .warning, metadata: metadata, file: file, function: function, line: line)
+        log(message(), level: .warning, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     func error(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: [String: Any]? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .error, metadata: metadata, file: file, function: function, line: line)
+        log(message(), level: .error, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     // MARK: - Typed Metadata Methods
 
     func debug(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: LogMetadata,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .debug, metadata: metadata.stringDictionary, file: file, function: function, line: line)
+        let dict = metadata.redactedDictionary(isProduction: environment == .production)
+        log(message(), level: .debug, category: category, metadata: dict, file: file, function: function, line: line)
     }
 
     func info(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: LogMetadata,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .info, metadata: metadata.stringDictionary, file: file, function: function, line: line)
+        let dict = metadata.redactedDictionary(isProduction: environment == .production)
+        log(message(), level: .info, category: category, metadata: dict, file: file, function: function, line: line)
     }
 
     func warning(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: LogMetadata,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .warning, metadata: metadata.stringDictionary, file: file, function: function, line: line)
+        let dict = metadata.redactedDictionary(isProduction: environment == .production)
+        log(message(), level: .warning, category: category, metadata: dict, file: file, function: function, line: line)
     }
 
     func error(
         _ message: @autoclosure () -> String,
+        category: String? = nil,
         metadata: LogMetadata,
         file: String = #file,
         function: String = #function,
         line: Int = #line
     ) {
-        log(message(), level: .error, metadata: metadata.stringDictionary, file: file, function: function, line: line)
+        let dict = metadata.redactedDictionary(isProduction: environment == .production)
+        log(message(), level: .error, category: category, metadata: dict, file: file, function: function, line: line)
     }
 
     /// Returns whether the given log level is enabled under the current configuration.
@@ -172,6 +188,7 @@ extension EasyLogger {
                 message: message,
                 level: level,
                 metadata: metadata?.mapValues { String(describing: $0) },
+                category: nil,
                 file: "",
                 function: "",
                 line: 0
