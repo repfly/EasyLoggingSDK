@@ -2,7 +2,8 @@
 import UIKit
 
 /// Handles the 'shake-to-share' functionality.
-class ShakeToShareHandler {
+@MainActor
+final class ShakeToShareHandler {
     private let logger: EasyLogger
     private var shakeGestureWindow: UIWindow?
 

@@ -4,60 +4,76 @@ import Logging
 
 public final class EasyLogger: @unchecked Sendable {
     // MARK: - Singleton
-    
+
     public static let shared = EasyLogger()
 
     // MARK: - Properties
-    
-    let queue = DispatchQueue(label: "com.easylogger.sdk.queue")
-    
+
+    let loggingActor = LoggingActor()
+
     let crashFlagKey = LoggingConstants.UserDefaultsKey.crashFlag
     let environmentKey = LoggingConstants.UserDefaultsKey.environment
     var _configuration: Configuration
     let _lock = UnfairLock()
-    var fileLogger: DDFileLogger?
     var _currentEnvironment: LogEnvironment
     let screenTimeTracker = ScreenTimeTracker()
 
     #if canImport(UIKit)
-    lazy var memoryLeakDetector = MemoryLeakDetector(logger: self)
+    var memoryLeakDetector: MemoryLeakDetector!
     var _logViewer: InAppLogViewer!
 
-    // Internal access to fileLogger for InAppLogViewer
+    /// Internal access to the file logger for ``InAppLogViewer`` file history.
+    ///
+    /// This bridges to ``LoggingActor`` synchronously and is intended for UI-triggered reads.
     var internalFileLogger: DDFileLogger? {
-        return self.fileLogger
+        var result: DDFileLogger?
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            result = await loggingActor.fileLogger
+            semaphore.signal()
+        }
+        semaphore.wait()
+        return result
     }
 
-    // UIKit-related handlers
+    // UIKit-related handlers (typed as `Any` to keep the core target free of UIKit at the type level).
     var lifecycleManager: Any?
     var shakeToShareHandler: Any?
     #endif
 
-    static var isLoggingSystemBootstrapped = false
-    static let bootstrapLock = NSLock()
-    
     #if canImport(UIKit)
+    @MainActor
     var logViewer: InAppLogViewer {
         return _logViewer
     }
     #endif
 
-    /// Returns whether shake-to-share is currently enabled
+    /// Returns whether shake-to-share is currently enabled.
     var isShakeToShareEnabled: Bool {
         _lock.withLock { self._configuration.enableShakeToShare }
     }
 
-    // Thread-safe configuration access using unfair lock
+    // Thread-safe configuration access using unfair lock.
     public var configuration: Configuration {
         get { _lock.withLock { self._configuration } }
-        set { _lock.withLock { self._configuration = newValue } }
+        set {
+            let previous = _lock.withLock {
+                let old = self._configuration
+                self._configuration = newValue
+                return old
+            }
+            Task { await self.loggingActor.applyConfiguration(newValue) }
+            #if canImport(UIKit)
+            applyUIKitConfiguration(previous: previous, new: newValue)
+            #endif
+        }
     }
 
     public var environment: LogEnvironment {
         get { _lock.withLock { self._currentEnvironment } }
         set { _lock.withLock { self._currentEnvironment = newValue } }
     }
-    
+
     // MARK: - Initialization
 
     private init() {
@@ -67,36 +83,53 @@ public final class EasyLogger: @unchecked Sendable {
 
         #if canImport(UIKit)
         self._logViewer = InAppLogViewer(logger: self)
+        self.memoryLeakDetector = MemoryLeakDetector(logger: self)
         #endif
 
-        initializeLogger(with: self._configuration)
+        Task { [config = self._configuration] in
+            #if canImport(UIKit)
+            await self.loggingActor.setLogViewer(self._logViewer)
+            #endif
+            await self.loggingActor.applyConfiguration(config)
+            await self.loggingActor.setupCrashDetection(with: config)
+            self.detectPreviousCrash()
+        }
+
         setupUIKitIntegrationsIfAvailable()
     }
-    
+
     deinit {}
-    
+
     private func setupUIKitIntegrationsIfAvailable() {
         #if canImport(UIKit)
-        self.lifecycleManager = LifecycleManager(logger: self)
-        self.shakeToShareHandler = ShakeToShareHandler(logger: self)
+        Task { @MainActor in
+            self.lifecycleManager = LifecycleManager(logger: self)
+            self.shakeToShareHandler = ShakeToShareHandler(logger: self)
+        }
         #endif
     }
-    
+
     // MARK: - Configuration
-    
+
     public func setupEnvironment(_ environment: LogEnvironment, customConfiguration: Configuration? = nil) {
-        queue.async {
+        let previous = _lock.withLock {
             self._currentEnvironment = environment
-            UserDefaults.standard.set(environment.rawValue, forKey: self.environmentKey)
-            
-            if let customConfig = customConfiguration {
-                self.performConfiguration(customConfig)
-            } else {
-                self.performConfiguration(environment.defaultConfiguration)
-            }
+            return self._configuration
         }
+        UserDefaults.standard.set(environment.rawValue, forKey: self.environmentKey)
+
+        let config = customConfiguration ?? environment.defaultConfiguration
+        _lock.withLock { self._configuration = config }
+
+        Task {
+            await self.loggingActor.applyConfiguration(config)
+        }
+
+        #if canImport(UIKit)
+        applyUIKitConfiguration(previous: previous, new: config)
+        #endif
     }
-    
+
     /// Configuration for the logging SDK.
     ///
     /// Use environment presets for quick setup:
@@ -180,74 +213,93 @@ public final class EasyLogger: @unchecked Sendable {
         public init() {}
     }
 
+    /// Applies a new configuration and reinitializes loggers and optional UIKit integrations.
     public func configure(_ configuration: Configuration) {
-        queue.async {
-            self.performConfiguration(configuration)
+        let previous = self.configuration
+        _lock.withLock { self._configuration = configuration }
+        Task {
+            await self.loggingActor.applyConfiguration(configuration)
         }
+        #if canImport(UIKit)
+        applyUIKitConfiguration(previous: previous, new: configuration)
+        #endif
     }
 
-    private func performConfiguration(_ configuration: Configuration) {
-        let previousConfig = _lock.withLock { self._configuration }
-        _lock.withLock { self._configuration = configuration }
-
-        resetLoggers()
-        initializeLogger(with: configuration)
-
-        #if canImport(UIKit)
-        let wasTrackingEnabled = previousConfig.trackScreenLoadingTimes && previousConfig.useAutomaticUIKitScreenTimeTracking
-        let willBeTrackingEnabled = configuration.trackScreenLoadingTimes && configuration.useAutomaticUIKitScreenTimeTracking
+    #if canImport(UIKit)
+    private func applyUIKitConfiguration(previous: Configuration, new: Configuration) {
+        let wasTrackingEnabled = previous.trackScreenLoadingTimes && previous.useAutomaticUIKitScreenTimeTracking
+        let willBeTrackingEnabled = new.trackScreenLoadingTimes && new.useAutomaticUIKitScreenTimeTracking
         if !wasTrackingEnabled, willBeTrackingEnabled {
             UIViewController.setupScreenTimeTracking()
         } else if wasTrackingEnabled, !willBeTrackingEnabled {
             UIViewController.tearDownScreenTimeTracking()
         }
 
-        let wasLeakDetectionEnabled = previousConfig.enableMemoryLeakDetection
-        let willBeLeakDetectionEnabled = configuration.enableMemoryLeakDetection
+        let wasLeakDetectionEnabled = previous.enableMemoryLeakDetection
+        let willBeLeakDetectionEnabled = new.enableMemoryLeakDetection
         if !wasLeakDetectionEnabled, willBeLeakDetectionEnabled {
-            memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: configuration.memoryLeakCheckInterval)
-            memoryLeakDetector.startMonitoring()
+            memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: new.memoryLeakCheckInterval)
+            Task { await memoryLeakDetector.startMonitoring() }
         } else if wasLeakDetectionEnabled, !willBeLeakDetectionEnabled {
-            memoryLeakDetector.stopMonitoring()
+            Task { await memoryLeakDetector.stopMonitoring() }
         } else if wasLeakDetectionEnabled, willBeLeakDetectionEnabled {
-            memoryLeakDetector.stopMonitoring()
-            memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: configuration.memoryLeakCheckInterval)
-            memoryLeakDetector.startMonitoring()
+            Task {
+                await memoryLeakDetector.stopMonitoring()
+                self.memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: new.memoryLeakCheckInterval)
+                await self.memoryLeakDetector.startMonitoring()
+            }
         }
 
-        let wasLogViewerEnabled = previousConfig.enableInAppLogViewer
-        let willBeLogViewerEnabled = configuration.enableInAppLogViewer
-        if wasLogViewerEnabled != willBeLogViewerEnabled || willBeLogViewerEnabled {
-            DispatchQueue.main.async {
+        let logViewerConfigChanged = previous.enableInAppLogViewer != new.enableInAppLogViewer
+            || previous.logViewerActivationGesture != new.logViewerActivationGesture
+            || previous.logViewerAccessCode != new.logViewerAccessCode
+            || previous.maxLogViewerEntries != new.maxLogViewerEntries
+
+        if logViewerConfigChanged || new.enableInAppLogViewer {
+            Task { @MainActor in
                 self.logViewer.configure(
-                    isEnabled: configuration.enableInAppLogViewer,
-                    activationGesture: configuration.logViewerActivationGesture,
-                    accessCode: configuration.logViewerAccessCode,
-                    maxLogEntries: configuration.maxLogViewerEntries
+                    isEnabled: new.enableInAppLogViewer,
+                    activationGesture: new.logViewerActivationGesture,
+                    accessCode: new.logViewerAccessCode,
+                    maxLogEntries: new.maxLogViewerEntries
                 )
             }
         }
-        #endif
-    }
 
+        let shakeConfigChanged = previous.enableShakeToShare != new.enableShakeToShare
+            || previous.shareDialogTitle != new.shareDialogTitle
+            || previous.shareDialogMessage != new.shareDialogMessage
+
+        if shakeConfigChanged || new.enableShakeToShare {
+            Task { @MainActor in
+                (self.shakeToShareHandler as? ShakeToShareHandler)?.setupShakeToShare()
+            }
+        }
+    }
+    #endif
+
+    // MARK: - Logging
+
+    /// Logs a message with the specified level and optional metadata.
+    ///
+    /// Configuration is read outside the logging actor to avoid deadlock if configuration
+    /// changes trigger logging while a log is in flight.
     public func log(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: [String: Any]? = nil, file: String = #file, function: String = #function, line: Int = #line) {
-        // Get config outside the queue to avoid deadlock
         let config = self.configuration
         guard level >= config.minimumLogLevel else { return }
-        
+
         let messageString = message()
-        queue.async {
-            let formattedMessage = config.logFormat.format(message: messageString, level: level, metadata: metadata?.mapValues { String(describing: $0) }, category: category, file: file, function: function, line: line)
-            
-            #if canImport(UIKit)
-            if config.enableInAppLogViewer {
-                self.logViewer.addLogEntry(message: messageString, level: level, category: category, metadata: metadata?.mapValues { String(describing: $0) })
-            }
-            #endif
-            
-            withVaList([formattedMessage as NSString]) { args in
-                DDLog.log(asynchronous: false, level: level.ddLogLevel, flag: level.flag, context: 0, file: file, function: function, line: UInt(line), tag: nil, format: "%@", arguments: args)
-            }
+        Task {
+            await self.loggingActor.log(
+                messageString: messageString,
+                level: level,
+                category: category,
+                metadata: metadata,
+                file: file,
+                function: function,
+                line: line,
+                config: config
+            )
         }
     }
 
@@ -259,12 +311,11 @@ public final class EasyLogger: @unchecked Sendable {
     public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: [String: Any]?, codableMetadata: T, file: String = #file, function: String = #function, line: Int = #line) {
         var combinedMetadata = metadata ?? [:]
         let encodedCodable = encodeCodableToMetadata(codableMetadata)
-        
-        // Merge the two metadata dictionaries
+
         for (key, value) in encodedCodable {
             combinedMetadata[key] = value
         }
-        
+
         log(message(), level: level, category: category, metadata: combinedMetadata, file: file, function: function, line: line)
     }
 
@@ -273,38 +324,30 @@ public final class EasyLogger: @unchecked Sendable {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
             let data = try encoder.encode(codable)
-            
+
             if let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 return jsonObject
             } else if let jsonString = String(data: data, encoding: .utf8) {
-                // If it's not a dictionary (e.g., array or primitive), store as JSON string
                 return ["codable_data": jsonString]
             }
         } catch {
-            // If encoding fails, fall back to description
             return ["codable_error": "Failed to encode: \(error.localizedDescription)", "codable_description": String(describing: codable)]
         }
-        
+
         return ["codable_fallback": String(describing: codable)]
     }
-    
+
     func applicationWillTerminate() {
-        queue.async {
-            UserDefaults.standard.set(false, forKey: self.crashFlagKey)
+        Task {
+            await loggingActor.applicationWillTerminate(crashFlagKey: self.crashFlagKey)
         }
     }
-    
+
     func applicationDidFinishLaunching() {
         #if canImport(UIKit)
-        DispatchQueue.main.async {
+        Task { @MainActor in
             (self.shakeToShareHandler as? ShakeToShareHandler)?.setupShakeToShare()
         }
         #endif
-    }
-
-    func performOnInternalQueue(_ block: @escaping () -> Void) {
-        queue.async {
-            block()
-        }
     }
 }

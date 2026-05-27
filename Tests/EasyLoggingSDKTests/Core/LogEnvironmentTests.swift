@@ -10,6 +10,7 @@ final class LogEnvironmentTests: XCTestCase {
         XCTAssertTrue(config.shouldLogToFile)
         XCTAssertTrue(config.enableShakeToShare)
         XCTAssertTrue(config.enableInAppLogViewer)
+        XCTAssertEqual(config.logViewerActivationGesture, .longPress)
         XCTAssertTrue(config.enableMemoryLeakDetection)
         XCTAssertTrue(config.trackScreenLoadingTimes)
     }

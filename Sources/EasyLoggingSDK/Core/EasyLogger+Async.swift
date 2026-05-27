@@ -1,31 +1,15 @@
-//
-//  EasyLogger+Async.swift
-//
-//
-//  Created by Yildirim, Alper on 19.08.2024.
-//
-
 import Foundation
 
 @available(iOS 15.0, macOS 12.0, *)
 public extension EasyLogger {
     /// Asynchronously rotates the current log file
     func rotateLogFileAsync() async {
-        await withCheckedContinuation { continuation in
-            rotateLogFile {
-                continuation.resume()
-            }
-        }
+        await loggingActor.rotateLogFile()
     }
 
     /// Asynchronously removes all log files
     func removeAllLogFilesAsync() async {
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                self.removeAllLogFiles()
-                continuation.resume()
-            }
-        }
+        await loggingActor.removeAllLogFiles()
     }
 
     /// Asynchronously logs a message with the specified level and metadata
@@ -38,21 +22,20 @@ public extension EasyLogger {
         function: String = #function,
         line: Int = #line
     ) async {
+        let config = self.configuration
+        guard level >= config.minimumLogLevel else { return }
+
         let evaluatedMessage = message()
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                self.log(
-                    evaluatedMessage,
-                    level: level,
-                    category: category,
-                    metadata: metadata,
-                    file: file,
-                    function: function,
-                    line: line
-                )
-                continuation.resume()
-            }
-        }
+        await loggingActor.log(
+            messageString: evaluatedMessage,
+            level: level,
+            category: category,
+            metadata: metadata,
+            file: file,
+            function: function,
+            line: line,
+            config: config
+        )
     }
 
     /// Asynchronously logs a debug message
@@ -137,12 +120,8 @@ public extension EasyLogger {
 
     /// Asynchronously configures the logger
     func configureAsync(_ configuration: Configuration) async {
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                self.configure(configuration)
-                continuation.resume()
-            }
-        }
+        _lock.withLock { self._configuration = configuration }
+        await loggingActor.applyConfiguration(configuration)
     }
 
     /// Asynchronously sets up the environment
@@ -150,11 +129,11 @@ public extension EasyLogger {
         _ environment: LogEnvironment,
         customConfiguration: Configuration? = nil
     ) async {
-        await withCheckedContinuation { continuation in
-            self.performOnInternalQueue {
-                self.setupEnvironment(environment, customConfiguration: customConfiguration)
-                continuation.resume()
-            }
-        }
+        _lock.withLock { self._currentEnvironment = environment }
+        UserDefaults.standard.set(environment.rawValue, forKey: self.environmentKey)
+
+        let config = customConfiguration ?? environment.defaultConfiguration
+        _lock.withLock { self._configuration = config }
+        await loggingActor.applyConfiguration(config)
     }
 }
