@@ -1,8 +1,3 @@
-//
-//  NetworkLogger.swift
-//
-//
-
 import Foundation
 
 /// Intercepts URLSession requests via `URLProtocol` and logs request/response details.
@@ -10,15 +5,14 @@ import Foundation
 /// This class is **opt-in only** — it never swizzles global state.
 /// Use ``EasyLogger/networkLoggingSessionConfiguration()`` to get a pre-configured
 /// `URLSessionConfiguration`, or register ``NetworkLoggerURLProtocol`` manually.
-public final class NetworkLogger: @unchecked Sendable {
+public actor NetworkLogger {
 
     // MARK: - Singleton
 
-    static let shared = NetworkLogger()
+    public static let shared = NetworkLogger()
 
     // MARK: - Properties
 
-    private let lock = UnfairLock()
     private var pendingRequests: [URLRequest: CFAbsoluteTime] = [:]
 
     private init() {}
@@ -26,16 +20,12 @@ public final class NetworkLogger: @unchecked Sendable {
     // MARK: - Tracking
 
     func requestStarted(_ request: URLRequest) {
-        lock.withLock {
-            pendingRequests[request] = CFAbsoluteTimeGetCurrent()
-        }
+        pendingRequests[request] = CFAbsoluteTimeGetCurrent()
     }
 
     func requestCompleted(_ request: URLRequest, response: URLResponse?, data: Data?, error: Error?) {
         let endTime = CFAbsoluteTimeGetCurrent()
-        let startTime: CFAbsoluteTime? = lock.withLock {
-            pendingRequests.removeValue(forKey: request)
-        }
+        let startTime = pendingRequests.removeValue(forKey: request)
 
         let duration = startTime.map { endTime - $0 } ?? 0
         let httpResponse = response as? HTTPURLResponse
@@ -95,7 +85,6 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
     // MARK: - URLProtocol overrides
 
     override public class func canInit(with request: URLRequest) -> Bool {
-        // Avoid intercepting our own internal session requests
         guard URLProtocol.property(forKey: Constants.handledKey, in: request) == nil else {
             return false
         }
@@ -112,7 +101,7 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
         }
         URLProtocol.setProperty(true, forKey: Constants.handledKey, in: mutableRequest)
 
-        NetworkLogger.shared.requestStarted(request)
+        Task { await NetworkLogger.shared.requestStarted(request) }
 
         dataTask = internalSession.dataTask(with: mutableRequest as URLRequest)
         dataTask?.resume()
@@ -141,12 +130,18 @@ extension NetworkLoggerURLProtocol: URLSessionDataDelegate {
     }
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        NetworkLogger.shared.requestCompleted(
-            request,
-            response: task.response,
-            data: receivedData,
-            error: error
-        )
+        let capturedRequest = request
+        let capturedData = receivedData
+        let capturedResponse = task.response
+
+        Task {
+            await NetworkLogger.shared.requestCompleted(
+                capturedRequest,
+                response: capturedResponse,
+                data: capturedData,
+                error: error
+            )
+        }
 
         if let error = error {
             client?.urlProtocol(self, didFailWithError: error)

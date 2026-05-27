@@ -21,6 +21,8 @@ public extension EasyLogger {
     func networkLoggingSessionConfiguration(
         base: URLSessionConfiguration = .default
     ) -> URLSessionConfiguration {
+        guard configuration.enableNetworkLogging else { return base }
+
         let config = base
         var protocols = config.protocolClasses ?? []
         protocols.insert(NetworkLoggerURLProtocol.self, at: 0)

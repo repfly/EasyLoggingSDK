@@ -18,6 +18,7 @@ public enum LogEnvironment: String {
             config.shouldLogToFile = true
             config.enableShakeToShare = true
             config.enableInAppLogViewer = true
+            config.logViewerActivationGesture = .longPress
             config.enableMemoryLeakDetection = true
             config.trackScreenLoadingTimes = true
 

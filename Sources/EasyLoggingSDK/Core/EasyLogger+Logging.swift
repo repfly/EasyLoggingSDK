@@ -1,8 +1,3 @@
-//
-//  EasyLogger+Logging.swift
-//
-//
-
 import CocoaLumberjack
 import Foundation
 
@@ -182,43 +177,15 @@ extension EasyLogger {
         logInternalMessage(message, level: .error, metadata: metadata)
     }
 
-    func logInternalMessage(_ message: String, level: LogLevel, metadata: [String: Any]?) {
-        queue.async {
-            let formattedMessage = LogFormat.clean.format(
+    private func logInternalMessage(_ message: String, level: LogLevel, metadata: [String: Any]?) {
+        let config = self.configuration
+        Task {
+            await self.loggingActor.logInternal(
                 message: message,
                 level: level,
-                metadata: metadata?.mapValues { String(describing: $0) },
-                category: nil,
-                file: "",
-                function: "",
-                line: 0
+                metadata: metadata,
+                config: config
             )
-
-            #if canImport(UIKit)
-            let config = self._configuration
-            if config.enableInAppLogViewer {
-                self.logViewer.addLogEntry(
-                    message: message,
-                    level: level,
-                    metadata: metadata?.mapValues { String(describing: $0) }
-                )
-            }
-            #endif
-
-            withVaList([formattedMessage as NSString]) { args in
-                DDLog.log(
-                    asynchronous: false,
-                    level: level.ddLogLevel,
-                    flag: level.flag,
-                    context: 0,
-                    file: "",
-                    function: "",
-                    line: 0,
-                    tag: nil,
-                    format: "%@",
-                    arguments: args
-                )
-            }
         }
     }
 }

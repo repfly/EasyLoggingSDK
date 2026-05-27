@@ -6,23 +6,46 @@ final class NetworkLoggerTests: XCTestCase {
     // MARK: - URLSessionConfiguration
 
     func testNetworkLoggingSessionConfigurationInsertsProtocol() {
-        let logger = EasyLogger.shared
-        let config = logger.networkLoggingSessionConfiguration()
+        var config = EasyLogger.Configuration()
+        config.enableNetworkLogging = true
+        EasyLogger.shared.configuration = config
 
-        let protocolClasses = config.protocolClasses ?? []
+        let configWithLogging = EasyLogger.shared.networkLoggingSessionConfiguration()
+
+        let protocolClasses = configWithLogging.protocolClasses ?? []
         let containsNetworkLogger = protocolClasses.contains { $0 == NetworkLoggerURLProtocol.self }
         XCTAssertTrue(containsNetworkLogger, "NetworkLoggerURLProtocol should be in protocolClasses")
     }
 
     func testNetworkLoggingSessionConfigurationPreservesExistingProtocols() {
+        var loggerConfig = EasyLogger.Configuration()
+        loggerConfig.enableNetworkLogging = true
+        EasyLogger.shared.configuration = loggerConfig
+
         let base = URLSessionConfiguration.default
         let originalCount = (base.protocolClasses ?? []).count
 
-        let logger = EasyLogger.shared
-        let config = logger.networkLoggingSessionConfiguration(base: base)
+        let config = EasyLogger.shared.networkLoggingSessionConfiguration(base: base)
         let newCount = (config.protocolClasses ?? []).count
 
         XCTAssertEqual(newCount, originalCount + 1)
+    }
+
+    func testNetworkLoggingSessionConfigurationSkipsProtocolWhenDisabled() {
+        var config = EasyLogger.Configuration()
+        config.enableNetworkLogging = false
+        EasyLogger.shared.configuration = config
+
+        let base = URLSessionConfiguration.default
+        let originalCount = (base.protocolClasses ?? []).count
+
+        let configWithoutLogging = EasyLogger.shared.networkLoggingSessionConfiguration(base: base)
+        let newCount = (configWithoutLogging.protocolClasses ?? []).count
+
+        XCTAssertEqual(newCount, originalCount)
+        XCTAssertFalse(
+            (configWithoutLogging.protocolClasses ?? []).contains { $0 == NetworkLoggerURLProtocol.self }
+        )
     }
 
     // MARK: - URLProtocol canInit

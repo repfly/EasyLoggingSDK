@@ -3,7 +3,8 @@ import Foundation
 import UIKit
 
 /// Manages the SDK's integration with the application lifecycle events.
-class LifecycleManager {
+@MainActor
+final class LifecycleManager {
     private let logger: EasyLogger
 
     init(logger: EasyLogger) {
