@@ -7,10 +7,10 @@ import UIKit
 /// `@unchecked Sendable` is the textbook-correct annotation here for an iOS 15 / macOS 12 target
 /// (no `Mutex`/`OSAllocatedUnfairLock` available): the type's mutable state is hand-synchronized.
 ///
-/// - `_configuration` and `_currentEnvironment` are guarded exclusively by `_lock` (an
-///   `os_unfair_lock` wrapper); every read/write goes through the `_lock.withLock { ... }`
+/// - `configurationStorage` and `currentEnvironmentStorage` are guarded exclusively by `stateLock` (an
+///   `os_unfair_lock` wrapper); every read/write goes through the `stateLock.withLock { ... }`
 ///   accessors below.
-/// - `_logViewer`, `lifecycleManager`, and `shakeToShareHandler` are only ever touched on the
+/// - `logViewerStorage`, `lifecycleManager`, and `shakeToShareHandler` are only ever touched on the
 ///   main actor (`logViewer` is `@MainActor`; the UIKit handlers are created and used inside
 ///   `@MainActor` tasks).
 /// - All log delivery is funneled through the `Sendable` `SerialLogPipeline`, which is itself
@@ -28,13 +28,13 @@ public final class EasyLogger: @unchecked Sendable {
     let pipeline: SerialLogPipeline
 
     let environmentKey = LoggingConstants.UserDefaultsKey.environment
-    var _configuration: Configuration
-    let _lock = UnfairLock()
-    var _currentEnvironment: LogEnvironment
+    var configurationStorage: Configuration
+    let stateLock = UnfairLock()
+    var currentEnvironmentStorage: LogEnvironment
     let screenTimeTracker = ScreenTimeTracker()
 
     #if canImport(UIKit)
-    var _logViewer: InAppLogViewer!
+    var logViewerStorage: InAppLogViewer!
 
     // UIKit-only handlers. These are `@MainActor` classes (implicitly `Sendable`) and are only ever
     // created and touched inside `@MainActor` tasks, so storing them on this `@unchecked Sendable`
@@ -46,25 +46,25 @@ public final class EasyLogger: @unchecked Sendable {
     #if canImport(UIKit)
     @MainActor
     var logViewer: InAppLogViewer {
-        return _logViewer
+        return logViewerStorage
     }
     #endif
 
     /// Returns whether shake-to-share is currently enabled.
     var isShakeToShareEnabled: Bool {
-        _lock.withLock { self._configuration.enableShakeToShare }
+        stateLock.withLock { self.configurationStorage.enableShakeToShare }
     }
 
     /// The current configuration. Get-only; apply changes via ``configure(_:)`` or
     /// ``setEnvironment(_:configuration:)``. Reads are lock-guarded.
     public var configuration: Configuration {
-        _lock.withLock { self._configuration }
+        stateLock.withLock { self.configurationStorage }
     }
 
     /// The active environment. Get-only; change it via ``setEnvironment(_:configuration:)`` so
     /// persistence, configuration apply, and UIKit reconfiguration always happen together.
     public var environment: LogEnvironment {
-        _lock.withLock { self._currentEnvironment }
+        stateLock.withLock { self.currentEnvironmentStorage }
     }
 
     // MARK: - Initialization
@@ -73,8 +73,8 @@ public final class EasyLogger: @unchecked Sendable {
         let savedEnvironment = UserDefaults.standard.string(forKey: environmentKey)
         let environment = LogEnvironment(rawValue: savedEnvironment ?? "") ?? .development
         let initialConfiguration = environment.defaultConfiguration
-        self._currentEnvironment = environment
-        self._configuration = initialConfiguration
+        self.currentEnvironmentStorage = environment
+        self.configurationStorage = initialConfiguration
 
         // The pipeline routes every event to the actor in strict FIFO order. It is created
         // first so that any early logs/config applies are ordered behind the initial setup.
@@ -94,11 +94,11 @@ public final class EasyLogger: @unchecked Sendable {
         }
 
         #if canImport(UIKit)
-        self._logViewer = InAppLogViewer(logger: self)
+        self.logViewerStorage = InAppLogViewer(logger: self)
         // Wire the in-app viewer onto the actor as the *first* pipeline event so it is observed
         // before any log record is processed; otherwise early records enqueued before a separate
         // setup `Task` lands would be dropped from the in-memory viewer buffer (Phase 7 race fix).
-        if let viewer = _logViewer {
+        if let viewer = logViewerStorage {
             pipeline.enqueue(.actorOperation { actor in
                 await actor.setLogViewer(viewer)
             })
@@ -126,7 +126,7 @@ public final class EasyLogger: @unchecked Sendable {
     // MARK: - Configuration
 
     public func setEnvironment(_ environment: LogEnvironment, configuration: Configuration? = nil) {
-        _lock.withLock { self._currentEnvironment = environment }
+        stateLock.withLock { self.currentEnvironmentStorage = environment }
         UserDefaults.standard.set(environment.rawValue, forKey: self.environmentKey)
         applyConfigurationChange(configuration ?? environment.defaultConfiguration)
     }
@@ -136,9 +136,9 @@ public final class EasyLogger: @unchecked Sendable {
     /// UIKit integrations. Both the sync and async `configure`/`setEnvironment` entry points route
     /// through here so their side effects can never drift apart.
     func applyConfigurationChange(_ new: Configuration) {
-        let previous = _lock.withLock { () -> Configuration in
-            let old = self._configuration
-            self._configuration = new
+        let previous = stateLock.withLock { () -> Configuration in
+            let old = self.configurationStorage
+            self.configurationStorage = new
             return old
         }
         pipeline.enqueue(.applyConfiguration(new))
@@ -212,7 +212,7 @@ public final class EasyLogger: @unchecked Sendable {
         public var maxLogViewerEntries: Int = 1000
 
         /// Enable automatic network request logging via ``NetworkLoggerURLProtocol``.
-        /// When `true`, ``networkLoggingSessionConfiguration()`` is available to create
+        /// When `true`, ``networkLoggingSessionConfiguration(base:)`` is available to create
         /// a pre-configured `URLSessionConfiguration`.
         public var enableNetworkLogging: Bool = false
 
@@ -273,7 +273,15 @@ public final class EasyLogger: @unchecked Sendable {
     ///   is logged verbatim, so do not interpolate secrets into it — pass sensitive values as
     ///   metadata (sensitive-looking keys are redacted automatically; use
     ///   ``LogMetadata/setRedactable(_:forKey:redaction:)`` for explicit control).
-    public func log(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: LogMetadata? = nil, file: String = #file, function: String = #function, line: Int = #line) {
+    public func log(
+        _ message: @autoclosure () -> String,
+        level: LogLevel = .info,
+        category: String? = nil,
+        metadata: LogMetadata? = nil,
+        file: String = #file,
+        function: String = #function,
+        line: Int = #line
+    ) {
         let config = self.configuration
         guard level >= config.minimumLogLevel else { return }
 

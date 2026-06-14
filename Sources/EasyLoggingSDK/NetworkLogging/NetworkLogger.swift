@@ -3,7 +3,7 @@ import Foundation
 /// Intercepts URLSession requests via `URLProtocol` and logs request/response details.
 ///
 /// This class is **opt-in only** — it never swizzles global state.
-/// Use ``EasyLogger/networkLoggingSessionConfiguration()`` to get a pre-configured
+/// Use ``EasyLogger/networkLoggingSessionConfiguration(base:)`` to get a pre-configured
 /// `URLSessionConfiguration`, or register ``NetworkLoggerURLProtocol`` manually.
 ///
 /// ## Known limitations
@@ -143,7 +143,7 @@ public actor NetworkLogger {
 
 /// A `URLProtocol` subclass that intercepts network requests for logging.
 ///
-/// Registered automatically when you use ``EasyLogger/networkLoggingSessionConfiguration()``.
+/// Registered automatically when you use ``EasyLogger/networkLoggingSessionConfiguration(base:)``.
 /// You can also register it manually on any `URLSessionConfiguration`.
 ///
 /// ## Known limitations
@@ -158,7 +158,7 @@ public actor NetworkLogger {
 /// callbacks and the internal session's delegate callbacks, which `URLSession` serializes. To
 /// avoid inheriting a `Sendable` requirement from `URLSessionDataDelegate` (whose ancestor
 /// `URLSessionDelegate` is `Sendable`), the delegate work is delegated to a separate
-/// ``SessionDelegate`` object rather than conforming `self`.
+/// `SessionDelegate` object rather than conforming `self`.
 public final class NetworkLoggerURLProtocol: URLProtocol {
 
     private var dataTask: URLSessionDataTask?
@@ -173,6 +173,10 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
 
     // MARK: - URLProtocol overrides
 
+    // `URLProtocol` REQUIRES these to be `override class func`; they cannot be `static` (it would
+    // not compile, since you cannot override a static method). The `static_over_final_class` rule
+    // is a false positive here, so it is silenced precisely on each declaration.
+    // swiftlint:disable:next static_over_final_class
     override public class func canInit(with request: URLRequest) -> Bool {
         guard URLProtocol.property(forKey: Constants.handledKey, in: request) == nil else {
             return false
@@ -180,6 +184,7 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
         return true
     }
 
+    // swiftlint:disable:next static_over_final_class
     override public class func canonicalRequest(for request: URLRequest) -> URLRequest {
         request
     }
@@ -268,7 +273,12 @@ private final class SessionDelegate: NSObject, URLSessionDataDelegate {
     nonisolated(unsafe) weak var owner: NetworkLoggerURLProtocol?
     nonisolated(unsafe) private var receivedData = Data()
 
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
         owner?.didReceiveResponse(response)
         completionHandler(.allow)
     }

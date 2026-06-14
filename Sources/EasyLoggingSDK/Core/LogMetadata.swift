@@ -46,7 +46,7 @@ public struct LogMetadata: Sendable, ExpressibleByDictionaryLiteral {
             }
         }
 
-        /// Wraps an arbitrary value into a typed ``StoredValue``.
+        /// Wraps an arbitrary value into a typed `StoredValue`.
         ///
         /// `Bool` is matched before `Int` because `Bool` bridges to `NSNumber` and would
         /// otherwise be captured as an integer.

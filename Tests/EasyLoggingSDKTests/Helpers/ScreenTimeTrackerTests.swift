@@ -27,7 +27,7 @@ final class ScreenTimeTrackerTests: XCTestCase {
 
     func testEndRemovesTracking() async {
         await tracker.trackScreenAppearance(screenName: "TestScreen")
-        let _ = await tracker.endScreenTracking(screenName: "TestScreen")
+        _ = await tracker.endScreenTracking(screenName: "TestScreen")
         let secondDuration = await tracker.endScreenTracking(screenName: "TestScreen")
         XCTAssertNil(secondDuration)
     }
@@ -66,17 +66,17 @@ final class ScreenTimeTrackerTests: XCTestCase {
 
     func testConcurrentTrackingDoesNotCrash() async {
         await withTaskGroup(of: Void.self) { group in
-            for i in 0..<100 {
+            for index in 0..<100 {
                 group.addTask {
-                    await self.tracker.trackScreenAppearance(screenName: "Screen\(i)")
+                    await self.tracker.trackScreenAppearance(screenName: "Screen\(index)")
                 }
             }
         }
 
         await withTaskGroup(of: Void.self) { group in
-            for i in 0..<100 {
+            for index in 0..<100 {
                 group.addTask {
-                    let _ = await self.tracker.endScreenTracking(screenName: "Screen\(i)")
+                    _ = await self.tracker.endScreenTracking(screenName: "Screen\(index)")
                 }
             }
         }

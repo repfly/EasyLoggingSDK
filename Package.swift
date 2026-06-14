@@ -4,6 +4,8 @@ import PackageDescription
 
 let package = Package(
     name: "EasyLoggingSDK",
+    // iOS and macOS are the supported platforms. The SDK depends heavily on UIKit, so tvOS/
+    // watchOS are deliberately NOT declared (they would be unverified).
     platforms: [
         .iOS(.v15),
         .macOS(.v12)
@@ -15,8 +17,11 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", from: "3.8.0"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
+        .package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMajor(from: "3.8.0")),
+        .package(url: "https://github.com/apple/swift-log.git", .upToNextMajor(from: "1.4.0")),
+        // Build-tool plugin only: generates DocC documentation. It is NOT linked into the library,
+        // so it adds no runtime dependency for consumers of EasyLoggingSDK.
+        .package(url: "https://github.com/apple/swift-docc-plugin", .upToNextMajor(from: "1.0.0")),
     ],
     targets: [
         .target(

@@ -38,7 +38,7 @@ final class ConfigurationTests: XCTestCase {
 
         // Verify Configuration can be sent across actor boundaries
         Task {
-            let _ = config.minimumLogLevel
+            _ = config.minimumLogLevel
         }
     }
 }

@@ -1,11 +1,14 @@
 # SwiftLint Configuration
 
 disabled_rules:
+  # Pre-existing project choice: the codebase intentionally tolerates trailing whitespace.
   - trailing_whitespace
-  - line_length
-  - identifier_name
+  # KEPT DISABLED — documented, justified exception.
+  # The public log/level methods intentionally take message + level + category + metadata PLUS
+  # the #file/#function/#line source-location parameters. This is the idiomatic Swift logging
+  # signature (mirroring swift-log and os.Logger). Bundling these into a parameter object would
+  # harm call-site ergonomics for the most common API in the SDK, so this rule stays disabled.
   - function_parameter_count
-  - nesting
 
 opt_in_rules:
   - empty_count
@@ -14,20 +17,27 @@ opt_in_rules:
 
 included:
   - Sources/EasyLoggingSDK
+  - Tests/EasyLoggingSDKTests
 
 excluded:
   - .build
   - Carthage
   - Pods
-  - Tests
 
 type_body_length:
-  warning: 250
-  error: 350
+  # Raised from the defaults so naturally long XCTest case classes (many independent test
+  # methods in one file) do not trip the rule once the test target is linted.
+  warning: 350
+  error: 500
 
 file_length:
   warning: 500
   error: 800
+
+line_length:
+  # Pragmatic limit: wrap long declarations rather than raising this further.
+  warning: 140
+  error: 200
 
 reporter: "xcode"
 

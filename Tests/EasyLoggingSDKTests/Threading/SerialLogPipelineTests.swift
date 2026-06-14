@@ -66,6 +66,57 @@ final class SerialLogPipelineTests: XCTestCase {
         XCTAssertEqual(processed, count, "Flush must guarantee all enqueued work is processed")
     }
 
+    /// Records and configuration applies must observe the SAME serial FIFO order: a config
+    /// enqueued between two records must be applied strictly after the first and before the
+    /// second. This pins the ordering contract across event *types*, not just records.
+    func testInterleavedRecordsAndConfigurationApplysPreserveOrdering() async {
+        // Collects record + config events in the exact order the handler observes them.
+        actor Trace {
+            private(set) var events: [String] = []
+            func record(_ message: String) { events.append("record:\(message)") }
+            func config(_ level: LogLevel) { events.append("config:\(level)") }
+            var snapshot: [String] { events }
+        }
+        let trace = Trace()
+
+        let pipeline = SerialLogPipeline { event in
+            switch event {
+            case let .record(record):
+                await trace.record(record.messageString)
+            case let .applyConfiguration(configuration):
+                await trace.config(configuration.minimumLogLevel)
+            case .actorOperation, .flush:
+                break
+            }
+        }
+
+        // Interleave: record A, config(.error), record B, config(.warning), record C.
+        pipeline.enqueue(.record(makeRecord("A")))
+        var errorConfig = EasyLogger.Configuration()
+        errorConfig.minimumLogLevel = .error
+        pipeline.enqueue(.applyConfiguration(errorConfig))
+        pipeline.enqueue(.record(makeRecord("B")))
+        var warningConfig = EasyLogger.Configuration()
+        warningConfig.minimumLogLevel = .warning
+        pipeline.enqueue(.applyConfiguration(warningConfig))
+        pipeline.enqueue(.record(makeRecord("C")))
+
+        await pipeline.flush()
+
+        let observed = await trace.snapshot
+        XCTAssertEqual(
+            observed,
+            [
+                "record:A",
+                "config:error",
+                "record:B",
+                "config:warning",
+                "record:C"
+            ],
+            "Config applies must be ordered exactly between the records they were enqueued between"
+        )
+    }
+
     func testFlushWithNoWorkReturns() async {
         let pipeline = SerialLogPipeline { _ in }
 

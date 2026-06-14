@@ -11,12 +11,12 @@ final class ThreadSafetyTests: XCTestCase {
         let group = DispatchGroup()
 
         // Concurrent writers
-        for i in 0..<iterations {
+        for index in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
                 var config = EasyLogger.Configuration()
-                config.minimumLogLevel = i % 2 == 0 ? .debug : .error
-                config.maxFileSize = UInt64(i)
+                config.minimumLogLevel = index % 2 == 0 ? .debug : .error
+                config.maxFileSize = UInt64(index)
                 EasyLogger.shared.configure(config)
                 group.leave()
             }
@@ -28,8 +28,8 @@ final class ThreadSafetyTests: XCTestCase {
             DispatchQueue.global().async {
                 let config = EasyLogger.shared.configuration
                 // Just verify we can read without crashing
-                let _ = config.minimumLogLevel
-                let _ = config.maxFileSize
+                _ = config.minimumLogLevel
+                _ = config.maxFileSize
                 group.leave()
             }
         }
@@ -50,10 +50,10 @@ final class ThreadSafetyTests: XCTestCase {
 
         let environments: [LogEnvironment] = [.development, .staging, .production]
 
-        for i in 0..<iterations {
+        for index in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
-                EasyLogger.shared.setEnvironment(environments[i % environments.count])
+                EasyLogger.shared.setEnvironment(environments[index % environments.count])
                 group.leave()
             }
         }
@@ -61,7 +61,7 @@ final class ThreadSafetyTests: XCTestCase {
         for _ in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
-                let _ = EasyLogger.shared.environment
+                _ = EasyLogger.shared.environment
                 group.leave()
             }
         }
@@ -82,10 +82,10 @@ final class ThreadSafetyTests: XCTestCase {
 
         let levels: [LogLevel] = [.trace, .debug, .info, .warning, .error, .critical]
 
-        for i in 0..<iterations {
+        for index in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
-                let _ = EasyLogger.shared.isEnabled(level: levels[i % levels.count])
+                _ = EasyLogger.shared.isEnabled(level: levels[index % levels.count])
                 group.leave()
             }
         }

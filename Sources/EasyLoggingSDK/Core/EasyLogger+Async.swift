@@ -129,7 +129,7 @@ public extension EasyLogger {
         _ environment: LogEnvironment,
         configuration: Configuration? = nil
     ) async {
-        _lock.withLock { self._currentEnvironment = environment }
+        stateLock.withLock { self.currentEnvironmentStorage = environment }
         UserDefaults.standard.set(environment.rawValue, forKey: self.environmentKey)
         applyConfigurationChange(configuration ?? environment.defaultConfiguration)
         await pipeline.flush()
