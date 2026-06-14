@@ -19,11 +19,35 @@ actor LoggingActor {
 
     // MARK: - Log Dispatch
 
-    func log(
+    /// Single serialized entry point for log records. Branches on `record.isInternal` to choose
+    /// between the public and clean internal-format paths.
+    func process(_ record: LogRecord) {
+        if record.isInternal {
+            logInternal(
+                message: record.messageString,
+                level: record.level,
+                metadata: record.metadata,
+                config: record.config
+            )
+        } else {
+            log(
+                messageString: record.messageString,
+                level: record.level,
+                category: record.category,
+                metadata: record.metadata,
+                file: record.file,
+                function: record.function,
+                line: record.line,
+                config: record.config
+            )
+        }
+    }
+
+    private func log(
         messageString: String,
         level: LogLevel,
         category: String?,
-        metadata: [String: Any]?,
+        metadata: [String: String]?,
         file: String,
         function: String,
         line: Int,
@@ -32,7 +56,7 @@ actor LoggingActor {
         let formattedMessage = config.logFormat.format(
             message: messageString,
             level: level,
-            metadata: metadata?.mapValues { String(describing: $0) },
+            metadata: metadata,
             category: category,
             file: file,
             function: function,
@@ -45,7 +69,7 @@ actor LoggingActor {
                 message: messageString,
                 level: level,
                 category: category,
-                metadata: metadata?.mapValues { String(describing: $0) }
+                metadata: metadata
             )
         }
         #endif
@@ -66,16 +90,16 @@ actor LoggingActor {
         }
     }
 
-    func logInternal(
+    private func logInternal(
         message: String,
         level: LogLevel,
-        metadata: [String: Any]?,
+        metadata: [String: String]?,
         config: EasyLogger.Configuration
     ) {
         let formattedMessage = LogFormat.clean.format(
             message: message,
             level: level,
-            metadata: metadata?.mapValues { String(describing: $0) },
+            metadata: metadata,
             category: nil,
             file: "",
             function: "",
@@ -87,7 +111,7 @@ actor LoggingActor {
             logViewer?.addLogEntry(
                 message: message,
                 level: level,
-                metadata: metadata?.mapValues { String(describing: $0) }
+                metadata: metadata
             )
         }
         #endif
@@ -111,7 +135,6 @@ actor LoggingActor {
     // MARK: - Configuration
 
     func applyConfiguration(_ configuration: EasyLogger.Configuration) {
-        SwiftLogConfiguration.minimumLogLevel = configuration.minimumLogLevel
         resetLoggers()
         initializeLogger(with: configuration)
     }
@@ -130,7 +153,6 @@ actor LoggingActor {
     }
 
     private func bootstrapLoggingSystemOnce(with configuration: EasyLogger.Configuration) {
-        SwiftLogConfiguration.minimumLogLevel = configuration.minimumLogLevel
         guard !isLoggingSystemBootstrapped else { return }
 
         let minLevel = configuration.minimumLogLevel
@@ -178,7 +200,17 @@ actor LoggingActor {
         guard let logFileManager = fileLogger?.logFileManager else { return }
         let logFiles = logFileManager.sortedLogFileInfos
         for logFileInfo in logFiles {
-            try? FileManager.default.removeItem(atPath: logFileInfo.filePath)
+            do {
+                try FileManager.default.removeItem(atPath: logFileInfo.filePath)
+            } catch {
+                // Continue removing the remaining files, but surface the failure so it is
+                // diagnosable. `internalWarning` enqueues onto the serial pipeline and never
+                // blocks, so this is safe from inside the actor.
+                EasyLogger.shared.internalWarning(
+                    "LoggingActor: failed to remove a log file.",
+                    metadata: ["error": error.localizedDescription]
+                )
+            }
         }
     }
 
@@ -187,18 +219,10 @@ actor LoggingActor {
         return URL(fileURLWithPath: filePath)
     }
 
-    // MARK: - Crash Detection
-
-    func setupCrashDetection(with configuration: EasyLogger.Configuration) {
-        guard configuration.shouldDetectCrashes else { return }
-        NSSetUncaughtExceptionHandler { exception in
-            EasyLogger.handleException(exception)
-        }
-    }
-
-    // MARK: - Lifecycle
-
-    func applicationWillTerminate(crashFlagKey: String) {
-        UserDefaults.standard.set(false, forKey: crashFlagKey)
+    /// Returns the file paths of all rotated log files, newest first.
+    ///
+    /// The `DDFileLogger` never leaves the actor; only the resolved paths are returned.
+    func logFilePaths() -> [String] {
+        fileLogger?.logFileManager.sortedLogFileInfos.map(\.filePath) ?? []
     }
 }

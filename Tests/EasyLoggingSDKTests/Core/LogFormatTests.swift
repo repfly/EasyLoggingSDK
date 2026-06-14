@@ -63,22 +63,83 @@ final class LogFormatTests: XCTestCase {
 
     // MARK: - JSON Format
 
-    func testJSONFormatStructure() {
+    private func parseJSON(_ string: String) -> [String: Any]? {
+        guard let data = string.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    func testJSONFormatProducesValidJSON() {
         let result = LogFormat.json.format(
             message: "JSON test",
             level: .error,
             metadata: nil,
             category: nil,
-            file: "Test.swift",
+            file: "/path/to/Test.swift",
             function: "testJSON()",
             line: 10
         )
 
-        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertTrue(trimmed.contains("\"level\":\"error\""), "Got: \(trimmed)")
-        XCTAssertTrue(trimmed.contains("\"message\":\"JSON test\""))
-        XCTAssertTrue(trimmed.contains("\"file\":\"Test.swift\""))
-        XCTAssertTrue(trimmed.contains("\"line\":10"))
+        guard let object = parseJSON(result) else {
+            XCTFail("Output is not valid JSON: \(result)")
+            return
+        }
+
+        XCTAssertEqual(object["level"] as? String, "error")
+        XCTAssertEqual(object["message"] as? String, "JSON test")
+        XCTAssertEqual(object["file"] as? String, "Test.swift")
+        XCTAssertEqual(object["line"] as? Int, 10)
+        XCTAssertEqual(object["function"] as? String, "testJSON()")
+        XCTAssertNotNil(object["timestamp"] as? String)
+        // Optional fields omitted when absent.
+        XCTAssertNil(object["category"])
+        XCTAssertNil(object["metadata"])
+    }
+
+    func testJSONFormatIncludesCategoryAndMetadataWhenPresent() {
+        let result = LogFormat.json.format(
+            message: "msg",
+            level: .info,
+            metadata: ["userId": "42"],
+            category: "networking",
+            file: "File.swift",
+            function: "f()",
+            line: 1
+        )
+
+        guard let object = parseJSON(result) else {
+            XCTFail("Output is not valid JSON: \(result)")
+            return
+        }
+
+        XCTAssertEqual(object["category"] as? String, "networking")
+        let metadata = object["metadata"] as? [String: String]
+        XCTAssertEqual(metadata?["userId"], "42")
+    }
+
+    func testJSONFormatEscapesHostileContent() {
+        let hostileMessage = "He said \"hi\"\n\\path"
+        let hostileMetadataValue = "quote\" backslash\\ newline\n"
+
+        let result = LogFormat.json.format(
+            message: hostileMessage,
+            level: .warning,
+            metadata: ["danger": hostileMetadataValue],
+            category: "a\"b",
+            file: "File.swift",
+            function: "f()",
+            line: 5
+        )
+
+        guard let object = parseJSON(result) else {
+            XCTFail("Hostile output is not valid JSON: \(result)")
+            return
+        }
+
+        // Round-trips exactly through valid JSON.
+        XCTAssertEqual(object["message"] as? String, hostileMessage)
+        XCTAssertEqual(object["category"] as? String, "a\"b")
+        let metadata = object["metadata"] as? [String: String]
+        XCTAssertEqual(metadata?["danger"], hostileMetadataValue)
     }
 
     // MARK: - Clean Format
@@ -227,5 +288,85 @@ final class LogFormatTests: XCTestCase {
         )
 
         XCTAssertEqual(result, "[] test")
+    }
+
+    // MARK: - Single-Pass No Corruption
+
+    func testMessageContainingPlaceholderTokensIsNotSubstituted() {
+        let format = LogFormat(template: "%message")
+        let result = format.format(
+            message: "user typed %level and %message",
+            level: .error,
+            metadata: nil,
+            category: nil,
+            file: "",
+            function: "",
+            line: 0
+        )
+
+        XCTAssertEqual(result, "user typed %level and %message")
+    }
+
+    func testMetadataValueContainingPlaceholderIsNotSubstituted() {
+        let format = LogFormat(template: "%metadata")
+        let result = format.format(
+            message: "",
+            level: .info,
+            metadata: ["k": "%date"],
+            category: nil,
+            file: "",
+            function: "",
+            line: 0
+        )
+
+        XCTAssertEqual(result, "[k:%date]")
+    }
+
+    func testCategoryValueContainingPlaceholderIsNotSubstituted() {
+        let format = LogFormat(template: "%category - %message")
+        let result = format.format(
+            message: "real",
+            level: .info,
+            metadata: nil,
+            category: "%message",
+            file: "",
+            function: "",
+            line: 0
+        )
+
+        XCTAssertEqual(result, "%message - real")
+    }
+
+    // MARK: - Longest Match
+
+    func testLongestMatchResolvesLevelRawNotLevel() {
+        let format = LogFormat(template: "%levelRaw")
+        let result = format.format(
+            message: "",
+            level: .warning,
+            metadata: nil,
+            category: nil,
+            file: "",
+            function: "",
+            line: 0
+        )
+
+        // Must be the raw name, never "<emoji NAME>Raw".
+        XCTAssertEqual(result, "warning")
+    }
+
+    func testUnknownTokenIsEmittedVerbatim() {
+        let format = LogFormat(template: "%unknown %message")
+        let result = format.format(
+            message: "hi",
+            level: .info,
+            metadata: nil,
+            category: nil,
+            file: "",
+            function: "",
+            line: 0
+        )
+
+        XCTAssertEqual(result, "%unknown hi")
     }
 }

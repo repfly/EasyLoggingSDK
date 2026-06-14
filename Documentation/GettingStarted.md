@@ -30,18 +30,17 @@ No additional setup is needed — the SDK hooks into the UIKit lifecycle automat
 
 ### Environment Presets
 
-Call `setupEnvironment` once at launch. The setting persists across launches.
+Call `setEnvironment` once at launch. The setting persists across launches.
 
 ```swift
-logger.setupEnvironment(.production)
+logger.setEnvironment(.production)
 ```
 
-| Environment    | Min Level | Console | File | Crash Detection | Extras |
-|----------------|-----------|---------|------|-----------------|--------|
-| `.development` | debug     | ✓       | ✓    | ✓               | Shake-to-share, log viewer, leak detection, screen tracking |
-| `.staging`     | info      | —       | ✓    | ✓               | Log viewer (access code `qa_access`) |
-| `.production`  | warning   | —       | ✓    | ✓               | — |
-| `.custom`      | info      | —       | ✓    | —               | Override everything yourself |
+| Environment    | Min Level | Console | File | Extras |
+|----------------|-----------|---------|------|--------|
+| `.development` | debug     | ✓       | ✓    | Shake-to-share, log viewer, screen tracking |
+| `.staging`     | info      | —       | ✓    | Log viewer |
+| `.production`  | warning   | —       | ✓    | — |
 
 ### Custom Configuration
 
@@ -57,13 +56,15 @@ logger.configure(config)
 
 ### Logging & Levels
 
-Four levels, ordered by severity: `debug`, `info`, `warning`, `error`.
+Six levels, ordered by severity: `trace`, `debug`, `info`, `warning`, `error`, `critical`.
 
 ```swift
+logger.trace("Entering function")
 logger.debug("Cache hit")
 logger.info("User signed in")
 logger.warning("Disk space low")
 logger.error("Failed to save")
+logger.critical("Unrecoverable state")
 ```
 
 Messages use `@autoclosure` so expensive interpolations are only evaluated when the level is enabled.
@@ -81,26 +82,39 @@ Categories appear in the log output via the `%category` format placeholder and a
 
 ### Metadata
 
-Attach structured context to any log message.
+Attach structured context to any log message. `LogMetadata` is the single, `Sendable` metadata
+type — it is the one currency every logging API accepts.
 
 ```swift
-// Dictionary metadata
+// Dictionary literal
 logger.info("Order placed", metadata: ["orderId": "abc123", "total": 49.99])
 
-// Codable metadata
+// From a Codable value (top-level keys are flattened)
 struct Order: Codable { let id: String; let total: Double }
-logger.info("Order placed", metadata: Order(id: "abc123", total: 49.99))
+logger.info("Order placed", metadata: LogMetadata(codable: Order(id: "abc123", total: 49.99)))
 
-// Type-safe LogMetadata
+// Built incrementally
 var meta = LogMetadata()
 meta["userId"] = "u_42"
 meta["latency"] = 0.245
 logger.info("Request completed", metadata: meta)
 ```
 
+> Redaction protects metadata values, not the message string. Pass sensitive values as metadata
+> rather than interpolating them into the message.
+
 ### Privacy Redaction
 
-Mark sensitive values so they are automatically replaced with `<REDACTED>` in production.
+Sensitive values are replaced with `<REDACTED>`. Keys that look sensitive (e.g. `password`,
+`token`, `authorization`, `apiKey`, `secret`) are redacted **automatically on every path** — including
+dictionary literals and `LogMetadata(codable:)` — so the most natural call never leaks:
+
+```swift
+logger.error("Login failed", metadata: ["password": pw, "userId": id])
+// → password is <REDACTED>, userId is shown
+```
+
+Use `setRedactable` for explicit control (it overrides the automatic default):
 
 ```swift
 var meta = LogMetadata()
@@ -167,23 +181,6 @@ let session = URLSession(configuration: sessionConfig)
 // All requests through this session are now logged under the "network" category.
 ```
 
-### Memory Leak Detection
-
-Periodically checks monitored objects and warns if they outlive their expected lifecycle.
-
-```swift
-var config = EasyLogger.Configuration()
-config.enableMemoryLeakDetection = true
-config.memoryLeakCheckInterval = 5.0 // seconds
-logger.configure(config)
-
-// In your view controller
-override func viewDidLoad() {
-    super.viewDidLoad()
-    EasyLogger.shared.monitorForLeaks(self)
-}
-```
-
 ### In-App Log Viewer
 
 A full-screen overlay for QA testers. Supports search, level filtering, and log sharing.
@@ -192,7 +189,6 @@ A full-screen overlay for QA testers. Supports search, level filtering, and log 
 var config = EasyLogger.Configuration()
 config.enableInAppLogViewer = true
 config.logViewerActivationGesture = .shake       // or .longPress / .none
-config.logViewerAccessCode = "123456"             // optional PIN
 config.maxLogViewerEntries = 1000
 logger.configure(config)
 
@@ -200,13 +196,15 @@ logger.configure(config)
 logger.showInAppLogViewer()
 ```
 
-### Crash Detection
+### Crash Diagnostics (Out of Scope)
 
-Enabled by default. On an uncaught exception the SDK:
+EasyLoggingSDK does **not** capture crashes. An in-process `NSSetUncaughtExceptionHandler`
+misses most Swift runtime crashes and signals (e.g. `fatalError`, force-unwraps, `EXC_BAD_ACCESS`),
+does unsafe work inside a dying process, and clobbers any other crash reporter the app installs.
 
-1. Writes a full crash report (name, reason, stack trace) to the log file.
-2. Sets a crash flag in `UserDefaults`.
-3. On next launch, logs a warning if the previous session crashed.
+For crash diagnostics, use Apple's [MetricKit](https://developer.apple.com/documentation/metrickit)
+(`MXCrashDiagnostic` via `MXMetricManager`), which the system delivers safely on the next launch,
+or a dedicated crash-reporting service.
 
 ### Log Formats
 
@@ -241,12 +239,15 @@ logger.removeAllLogFiles()
 
 ## Async / Await
 
-Every logging and configuration method has an `async` variant:
+Logging and configuration methods provide same-name `async` overloads. In an `async` context,
+call them with `await` and the async overload is selected automatically; the call returns only
+after the work has been flushed and delivered.
 
 ```swift
-await logger.infoAsync("Background work done")
-await logger.configureAsync(config)
-await logger.setupEnvironmentAsync(.production)
+await logger.info("Background work done")
+await logger.configure(config)
+await logger.setEnvironment(.production)
+await logger.flush()
 ```
 
 ## Best Practices

@@ -9,7 +9,6 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(config.minimumLogLevel, .debug)
         XCTAssertTrue(config.shouldLogToConsole)
         XCTAssertTrue(config.shouldLogToFile)
-        XCTAssertTrue(config.shouldDetectCrashes)
         XCTAssertFalse(config.enableShakeToShare)
         XCTAssertFalse(config.trackScreenLoadingTimes)
         XCTAssertEqual(config.slowScreenLoadingThreshold, 1.0)
@@ -17,9 +16,7 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(config.maxLogFiles, 7)
         XCTAssertNil(config.logsDirectory)
         XCTAssertFalse(config.useAutomaticUIKitScreenTimeTracking)
-        XCTAssertFalse(config.enableMemoryLeakDetection)
         XCTAssertFalse(config.enableInAppLogViewer)
-        XCTAssertNil(config.logViewerAccessCode)
         XCTAssertEqual(config.maxLogViewerEntries, 1000)
     }
 
@@ -41,7 +38,7 @@ final class ConfigurationTests: XCTestCase {
 
         // Verify Configuration can be sent across actor boundaries
         Task {
-            let _ = config.minimumLogLevel
+            _ = config.minimumLogLevel
         }
     }
 }
