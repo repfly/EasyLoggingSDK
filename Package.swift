@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 
 import PackageDescription
 
@@ -24,14 +24,13 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-docc-plugin", .upToNextMajor(from: "1.0.0")),
     ],
     targets: [
+        // swift-tools-version 6.0 makes the Swift 6 language mode the default for every target,
+        // so complete strict-concurrency checking is on without the experimental flag.
         .target(
             name: "EasyLoggingSDK",
             dependencies: [
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "CocoaLumberjack", package: "CocoaLumberjack"),
-            ],
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency")
             ]
         ),
         .testTarget(

@@ -100,8 +100,12 @@ final class ThreadSafetyTests: XCTestCase {
     // MARK: - UnfairLock
 
     func testUnfairLockWithLock() {
+        // Heap-allocated counter so the concurrent closures mutate a shared reference's property
+        // (guarded by the lock under test) rather than a captured `var` — the latter is a Swift 6
+        // data-race error. The lock is exactly what makes this safe, which is what we're verifying.
+        final class Counter: @unchecked Sendable { var value = 0 }
+        let counter = Counter()
         let lock = UnfairLock()
-        var counter = 0
         let iterations = 10_000
         let expectation = XCTestExpectation(description: "Lock contention")
         let group = DispatchGroup()
@@ -110,14 +114,14 @@ final class ThreadSafetyTests: XCTestCase {
             group.enter()
             DispatchQueue.global().async {
                 lock.withLock {
-                    counter += 1
+                    counter.value += 1
                 }
                 group.leave()
             }
         }
 
         group.notify(queue: .main) {
-            XCTAssertEqual(counter, iterations)
+            XCTAssertEqual(counter.value, iterations)
             expectation.fulfill()
         }
 

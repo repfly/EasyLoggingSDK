@@ -1,7 +1,7 @@
 import Foundation
 
 /// Defines the logging environment for the application.
-public enum LogEnvironment: String {
+public enum LogEnvironment: String, Sendable {
     case development
     case staging
     case production

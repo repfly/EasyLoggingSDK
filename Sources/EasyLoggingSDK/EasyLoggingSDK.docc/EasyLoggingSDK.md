@@ -74,7 +74,8 @@ in-memory buffer and the on-disk files only ever see redacted metadata.
 
 ## Concurrency
 
-`EasyLoggingSDK` is built for Swift's strict-concurrency model:
+`EasyLoggingSDK` is built in the **Swift 6 language mode** with complete strict-concurrency
+checking — both the library and its tests compile cleanly with no concurrency warnings:
 
 - ``EasyLogger`` is `Sendable`; its mutable state is hand-synchronized with an
   `os_unfair_lock` (the textbook annotation for an iOS 15 / macOS 12 target).

@@ -65,10 +65,13 @@ final class ScreenTimeTrackerTests: XCTestCase {
     // MARK: - Concurrent Access
 
     func testConcurrentTrackingDoesNotCrash() async {
+        // Bind the Sendable actor to a local so the task closures don't capture the
+        // non-Sendable XCTestCase `self` (a Swift 6 sending-closure error otherwise).
+        let tracker = tracker!
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<100 {
                 group.addTask {
-                    await self.tracker.trackScreenAppearance(screenName: "Screen\(index)")
+                    await tracker.trackScreenAppearance(screenName: "Screen\(index)")
                 }
             }
         }
@@ -76,7 +79,7 @@ final class ScreenTimeTrackerTests: XCTestCase {
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<100 {
                 group.addTask {
-                    _ = await self.tracker.endScreenTracking(screenName: "Screen\(index)")
+                    _ = await tracker.endScreenTracking(screenName: "Screen\(index)")
                 }
             }
         }

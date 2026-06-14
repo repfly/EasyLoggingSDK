@@ -5,13 +5,13 @@ import Logging
 final class LumberjackLogHandlerTests: XCTestCase {
 
     func testInitializationDefaults() {
-        var handler = LumberjackLogHandler(label: "test")
+        let handler = LumberjackLogHandler(label: "test")
         XCTAssertEqual(handler.logLevel, .debug)
         XCTAssertTrue(handler.metadata.isEmpty)
     }
 
     func testInitializationWithMinimumLevel() {
-        var handler = LumberjackLogHandler(label: "test", minimumLogLevel: .warning)
+        let handler = LumberjackLogHandler(label: "test", minimumLogLevel: .warning)
         XCTAssertEqual(handler.logLevel, .warning)
     }
 

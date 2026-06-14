@@ -5,7 +5,7 @@ A Swift logging SDK for iOS that wraps CocoaLumberjack and Swift-log behind a si
 ## Features
 
 - **Unified Interface** — one logger backed by industry-standard frameworks.
-- **Thread-Safe** — all operations use `os_unfair_lock` and serial queues.
+- **Swift 6 & Concurrency-Safe** — builds in the Swift 6 language mode with complete strict-concurrency checking; log delivery is FIFO-ordered through a serializing actor pipeline (`await logger.flush()` guarantees delivery).
 - **Zero-Setup Lifecycle** — hooks into UIKit automatically; no `AppDelegate` code needed.
 - **SwiftUI Ready** — `.trackScreenTime(screenName:)` view modifier and manual tracking helpers.
 - **Log Categories** — tag messages with a subsystem (`"auth"`, `"networking"`, …) for filtering.
@@ -39,9 +39,9 @@ logger.debug("Cache hit", category: "storage")
 
 ## Requirements
 
-- iOS 15.0+
-- Swift 5.9+
-- Xcode 15.0+
+- iOS 15.0+ / macOS 12.0+
+- Swift 6.0+ (builds in the Swift 6 language mode)
+- Xcode 16.0+
 
 ## Dependencies
 
