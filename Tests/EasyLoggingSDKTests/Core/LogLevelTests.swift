@@ -80,15 +80,6 @@ final class LogLevelTests: XCTestCase {
         XCTAssertEqual(LogLevel.fromLogOutput("[🔍 DEBUG]"), .debug)
     }
 
-    // MARK: - Log Description Prefix
-
-    func testLogDescriptionPrefixes() {
-        XCTAssertTrue(LogLevel.debug.logDescriptionPrefix.contains("DEBUG"))
-        XCTAssertTrue(LogLevel.info.logDescriptionPrefix.contains("INFO"))
-        XCTAssertTrue(LogLevel.warning.logDescriptionPrefix.contains("WARNING"))
-        XCTAssertTrue(LogLevel.error.logDescriptionPrefix.contains("ERROR"))
-    }
-
     // MARK: - Filtering Logic
 
     func testFilteringWithMinimumLevel() {

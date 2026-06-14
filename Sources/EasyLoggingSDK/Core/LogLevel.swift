@@ -24,16 +24,6 @@ public enum LogLevel: Int, Comparable, Equatable, Sendable {
         }
     }
 
-    /// The prefix to use in log messages
-    public var logDescriptionPrefix: String {
-        switch self {
-        case .debug: return "🔍 DEBUG"
-        case .info: return "ℹ️ INFO"
-        case .warning: return "⚠️ WARNING"
-        case .error: return "❌ ERROR"
-        }
-    }
-    
     /// Convert to CocoaLumberjack log level
     public var ddLogLevel: DDLogLevel {
         switch self {
