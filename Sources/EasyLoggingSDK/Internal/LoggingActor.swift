@@ -225,19 +225,4 @@ actor LoggingActor {
     func logFilePaths() -> [String] {
         fileLogger?.logFileManager.sortedLogFileInfos.map(\.filePath) ?? []
     }
-
-    // MARK: - Crash Detection
-
-    func setupCrashDetection(with configuration: EasyLogger.Configuration) {
-        guard configuration.shouldDetectCrashes else { return }
-        NSSetUncaughtExceptionHandler { exception in
-            EasyLogger.handleException(exception)
-        }
-    }
-
-    // MARK: - Lifecycle
-
-    func applicationWillTerminate(crashFlagKey: String) {
-        UserDefaults.standard.set(false, forKey: crashFlagKey)
-    }
 }

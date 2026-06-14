@@ -77,30 +77,6 @@ public enum LogLevel: Int, Comparable, Equatable, Sendable, CustomStringConverti
         }
     }
 
-    /// Parses a level from formatted log output (emoji prefixes, bracket contents, etc.)
-    static func fromLogOutput(_ string: String) -> LogLevel? {
-        if let level = LogLevel(name: string) { return level }
-
-        let normalized = string
-            .replacingOccurrences(of: "🔬 ", with: "")
-            .replacingOccurrences(of: "🔍 ", with: "")
-            .replacingOccurrences(of: "ℹ️ ", with: "")
-            .replacingOccurrences(of: "⚠️ ", with: "")
-            .replacingOccurrences(of: "❌ ", with: "")
-            .replacingOccurrences(of: "🛑 ", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if let level = LogLevel(name: normalized) { return level }
-
-        let upper = normalized.uppercased()
-        for level in [LogLevel.trace, .debug, .info, .warning, .error, .critical]
-        where upper.contains(level.description.uppercased()) {
-            return level
-        }
-
-        return nil
-    }
-
     // Comparable based on severity (Int raw value)
     public static func < (lhs: LogLevel, rhs: LogLevel) -> Bool {
         lhs.rawValue < rhs.rawValue

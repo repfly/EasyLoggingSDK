@@ -20,6 +20,10 @@ struct LogRecord: Sendable {
 enum Event: Sendable {
     case record(LogRecord)
     case applyConfiguration(EasyLogger.Configuration)
+    /// A one-off operation to run against the logging actor, ordered in FIFO with all other
+    /// events. Used for setup work (e.g. wiring the in-app log viewer) that must be observed by
+    /// the actor *before* any subsequent log record is processed.
+    case actorOperation(@Sendable (LoggingActor) async -> Void)
     case flush(@Sendable () -> Void)
 }
 

@@ -36,11 +36,11 @@ Call `setEnvironment` once at launch. The setting persists across launches.
 logger.setEnvironment(.production)
 ```
 
-| Environment    | Min Level | Console | File | Crash Detection | Extras |
-|----------------|-----------|---------|------|-----------------|--------|
-| `.development` | debug     | ✓       | ✓    | ✓               | Shake-to-share, log viewer, screen tracking |
-| `.staging`     | info      | —       | ✓    | ✓               | Log viewer |
-| `.production`  | warning   | —       | ✓    | ✓               | — |
+| Environment    | Min Level | Console | File | Extras |
+|----------------|-----------|---------|------|--------|
+| `.development` | debug     | ✓       | ✓    | Shake-to-share, log viewer, screen tracking |
+| `.staging`     | info      | —       | ✓    | Log viewer |
+| `.production`  | warning   | —       | ✓    | — |
 
 ### Custom Configuration
 
@@ -196,13 +196,15 @@ logger.configure(config)
 logger.showInAppLogViewer()
 ```
 
-### Crash Detection
+### Crash Diagnostics (Out of Scope)
 
-Enabled by default. On an uncaught exception the SDK:
+EasyLoggingSDK does **not** capture crashes. An in-process `NSSetUncaughtExceptionHandler`
+misses most Swift runtime crashes and signals (e.g. `fatalError`, force-unwraps, `EXC_BAD_ACCESS`),
+does unsafe work inside a dying process, and clobbers any other crash reporter the app installs.
 
-1. Writes a full crash report (name, reason, stack trace) to the log file.
-2. Sets a crash flag in `UserDefaults`.
-3. On next launch, logs a warning if the previous session crashed.
+For crash diagnostics, use Apple's [MetricKit](https://developer.apple.com/documentation/metrickit)
+(`MXCrashDiagnostic` via `MXMetricManager`), which the system delivers safely on the next launch,
+or a dedicated crash-reporting service.
 
 ### Log Formats
 

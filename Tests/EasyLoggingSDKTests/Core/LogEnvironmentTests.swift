@@ -27,7 +27,6 @@ final class LogEnvironmentTests: XCTestCase {
         XCTAssertEqual(config.minimumLogLevel, .warning)
         XCTAssertFalse(config.shouldLogToConsole)
         XCTAssertTrue(config.shouldLogToFile)
-        XCTAssertTrue(config.shouldDetectCrashes)
         XCTAssertFalse(config.enableInAppLogViewer)
     }
 

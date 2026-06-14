@@ -9,7 +9,6 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(config.minimumLogLevel, .debug)
         XCTAssertTrue(config.shouldLogToConsole)
         XCTAssertTrue(config.shouldLogToFile)
-        XCTAssertTrue(config.shouldDetectCrashes)
         XCTAssertFalse(config.enableShakeToShare)
         XCTAssertFalse(config.trackScreenLoadingTimes)
         XCTAssertEqual(config.slowScreenLoadingThreshold, 1.0)

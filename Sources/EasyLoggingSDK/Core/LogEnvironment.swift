@@ -30,7 +30,6 @@ public enum LogEnvironment: String {
             config.minimumLogLevel = .warning
             config.shouldLogToConsole = false
             config.shouldLogToFile = true
-            config.shouldDetectCrashes = true
         }
         return config
     }

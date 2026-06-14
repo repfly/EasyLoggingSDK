@@ -137,28 +137,6 @@ final class LogLevelTests: XCTestCase {
         XCTAssertEqual(LogLevel(fromSwiftLogLevel: .critical), .critical)
     }
 
-    // MARK: - fromLogOutput
-
-    func testFromLogOutputPlainString() {
-        XCTAssertEqual(LogLevel.fromLogOutput("trace"), .trace)
-        XCTAssertEqual(LogLevel.fromLogOutput("debug"), .debug)
-        XCTAssertEqual(LogLevel.fromLogOutput("WARNING"), .warning)
-        XCTAssertEqual(LogLevel.fromLogOutput("critical"), .critical)
-    }
-
-    func testFromLogOutputFormattedPrefix() {
-        XCTAssertEqual(LogLevel.fromLogOutput("🔬 TRACE"), .trace)
-        XCTAssertEqual(LogLevel.fromLogOutput("🔍 DEBUG"), .debug)
-        XCTAssertEqual(LogLevel.fromLogOutput("ℹ️ INFO"), .info)
-        XCTAssertEqual(LogLevel.fromLogOutput("⚠️ WARNING"), .warning)
-        XCTAssertEqual(LogLevel.fromLogOutput("❌ ERROR"), .error)
-        XCTAssertEqual(LogLevel.fromLogOutput("🛑 CRITICAL"), .critical)
-    }
-
-    func testFromLogOutputBracketContent() {
-        XCTAssertEqual(LogLevel.fromLogOutput("[🔍 DEBUG]"), .debug)
-    }
-
     // MARK: - Filtering Logic
 
     func testFilteringWithMinimumLevel() {

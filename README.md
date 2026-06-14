@@ -12,8 +12,7 @@ A Swift logging SDK for iOS that wraps CocoaLumberjack and Swift-log behind a si
 - **Privacy Redaction** — mark metadata values as `.auto`, `.always`, or `.never` redacted; sensitive data is replaced with `<REDACTED>` in production.
 - **Network Logging** — opt-in `URLProtocol` interceptor logs every request's method, URL, status, and duration.
 - **Screen Time Tracking** — automatic UIKit swizzling or manual SwiftUI tracking with slow-load warnings.
-- **In-App Log Viewer** — searchable, filterable overlay for QA.
-- **Crash Detection** — uncaught-exception handler + previous-session crash reporting.
+- **In-App Log Viewer** — searchable, filterable overlay for QA, fed from the in-memory since-launch buffer.
 - **Customisable Formats** — template-based log formatting with `%date`, `%level`, `%category`, `%message`, and more.
 - **Async/Await** — every public method has an `async` variant.
 

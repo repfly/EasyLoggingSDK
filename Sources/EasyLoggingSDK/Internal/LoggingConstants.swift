@@ -19,8 +19,6 @@ public enum LoggingConstants {
     
     /// UserDefaults keys
     public enum UserDefaultsKey {
-        /// Key for crash flag
-        public static let crashFlag = "dev.alpr.EasyLoggingSDK.crashFlag"
         /// Key for environment setting
         public static let environment = "dev.alpr.EasyLoggingSDK.environment"
     }
@@ -38,18 +36,6 @@ public enum LoggingConstants {
         public static let removalError = "Failed to remove log files: %@"
     }
 
-    /// Crash detection log messages
-    public enum CrashDetectionMessage {
-        public static let crashDetected = """
-            🚨 CRASH DETECTED 🚨
-            Exception: %@
-            Reason: %@
-            Stack Trace:
-            %@
-            """
-        public static let previousCrash = "⚠️ App crashed in the previous session"
-    }
-    
     /// Metadata keys
     public enum MetadataKey {
         public static let screen = "screen"

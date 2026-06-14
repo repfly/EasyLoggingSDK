@@ -1,8 +1,5 @@
-//
 //  InAppLogViewerUI.swift
-//
 //  UI components for InAppLogViewer — extracted for file length compliance.
-//
 
 #if canImport(UIKit)
 import UIKit
@@ -42,7 +39,6 @@ final class LogViewerViewController: UIViewController,
     init(logViewer: InAppLogViewer) {
         self.logViewer = logViewer
         super.init(nibName: nil, bundle: nil)
-        loadAllLogEntries()
     }
 
     required init?(coder: NSCoder) {
@@ -252,7 +248,6 @@ final class LogEntryCell: UITableViewCell {
     private let levelLabel = UILabel()
     private let timestampLabel = UILabel()
     private let messageLabel = UILabel()
-    private let sourceLabel = UILabel()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -271,10 +266,6 @@ final class LogEntryCell: UITableViewCell {
         levelLabel.layer.masksToBounds = true
         contentView.addSubview(levelLabel)
 
-        sourceLabel.translatesAutoresizingMaskIntoConstraints = false
-        sourceLabel.font = UIFont.systemFont(ofSize: 14)
-        contentView.addSubview(sourceLabel)
-
         timestampLabel.translatesAutoresizingMaskIntoConstraints = false
         timestampLabel.font = UIFont.systemFont(ofSize: 12)
         timestampLabel.textColor = .secondaryLabel
@@ -290,11 +281,8 @@ final class LogEntryCell: UITableViewCell {
             levelLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             levelLabel.widthAnchor.constraint(equalToConstant: 60),
             levelLabel.heightAnchor.constraint(equalToConstant: 20),
-            sourceLabel.centerYAnchor.constraint(equalTo: levelLabel.centerYAnchor),
-            sourceLabel.leadingAnchor.constraint(equalTo: levelLabel.trailingAnchor, constant: 8),
-            sourceLabel.widthAnchor.constraint(equalToConstant: 25),
             timestampLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            timestampLabel.leadingAnchor.constraint(equalTo: sourceLabel.trailingAnchor, constant: 8),
+            timestampLabel.leadingAnchor.constraint(equalTo: levelLabel.trailingAnchor, constant: 8),
             timestampLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             messageLabel.topAnchor.constraint(equalTo: levelLabel.bottomAnchor, constant: 8),
             messageLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
@@ -307,9 +295,7 @@ final class LogEntryCell: UITableViewCell {
         levelLabel.text = entry.level.description.uppercased()
         levelLabel.backgroundColor = entry.levelColor.withAlphaComponent(0.2)
         levelLabel.textColor = entry.levelColor
-        sourceLabel.text = entry.sourceIcon
-        timestampLabel.text = entry.source == .file
-            ? entry.fullFormattedTimestamp : entry.formattedTimestamp
+        timestampLabel.text = entry.formattedTimestamp
         messageLabel.text = entry.message
         accessoryType = .disclosureIndicator
     }

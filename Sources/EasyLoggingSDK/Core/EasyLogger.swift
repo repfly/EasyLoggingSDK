@@ -27,7 +27,6 @@ public final class EasyLogger: @unchecked Sendable {
     /// Serializes all logging work (records, configuration applies, flush markers) in FIFO order.
     let pipeline: SerialLogPipeline
 
-    let crashFlagKey = LoggingConstants.UserDefaultsKey.crashFlag
     let environmentKey = LoggingConstants.UserDefaultsKey.environment
     var _configuration: Configuration
     let _lock = UnfairLock()
@@ -37,9 +36,11 @@ public final class EasyLogger: @unchecked Sendable {
     #if canImport(UIKit)
     var _logViewer: InAppLogViewer!
 
-    // UIKit-related handlers (typed as `Any` to keep the core target free of UIKit at the type level).
-    var lifecycleManager: Any?
-    var shakeToShareHandler: Any?
+    // UIKit-only handlers. These are `@MainActor` classes (implicitly `Sendable`) and are only ever
+    // created and touched inside `@MainActor` tasks, so storing them on this `@unchecked Sendable`
+    // singleton is safe.
+    var lifecycleManager: LifecycleManager?
+    var shakeToShareHandler: ShakeToShareHandler?
     #endif
 
     #if canImport(UIKit)
@@ -84,6 +85,8 @@ public final class EasyLogger: @unchecked Sendable {
                 await actor.process(record)
             case let .applyConfiguration(configuration):
                 await actor.applyConfiguration(configuration)
+            case let .actorOperation(operation):
+                await operation(actor)
             case .flush:
                 // Resumed by the pipeline's consumer loop itself; never forwarded here.
                 break
@@ -92,21 +95,19 @@ public final class EasyLogger: @unchecked Sendable {
 
         #if canImport(UIKit)
         self._logViewer = InAppLogViewer(logger: self)
+        // Wire the in-app viewer onto the actor as the *first* pipeline event so it is observed
+        // before any log record is processed; otherwise early records enqueued before a separate
+        // setup `Task` lands would be dropped from the in-memory viewer buffer (Phase 7 race fix).
+        if let viewer = _logViewer {
+            pipeline.enqueue(.actorOperation { actor in
+                await actor.setLogViewer(viewer)
+            })
+        }
         #endif
 
         // Initial configuration is enqueued through the pipeline so it is ordered ahead of any
-        // early logs. Crash-detection setup runs in its own Task (it only installs an idempotent
-        // exception handler, so it does not need to be ordered relative to log records).
-        #if canImport(UIKit)
-        Task { [actor, logViewer = _logViewer] in
-            await actor.setLogViewer(logViewer!)
-        }
-        #endif
+        // early logs.
         pipeline.enqueue(.applyConfiguration(initialConfiguration))
-        Task { [actor, weak self] in
-            await actor.setupCrashDetection(with: initialConfiguration)
-            self?.detectPreviousCrash()
-        }
 
         setupUIKitIntegrationsIfAvailable()
     }
@@ -166,11 +167,9 @@ public final class EasyLogger: @unchecked Sendable {
         /// Write logs to the system console via CocoaLumberjack's OS logger.
         public var shouldLogToConsole: Bool = true
 
-        /// Write logs to rotating files on disk. Required for log sharing and the in-app viewer's file history.
+        /// Write logs to rotating files on disk. Required for log sharing (the in-app viewer shows
+        /// the in-memory, since-launch buffer regardless of this flag).
         public var shouldLogToFile: Bool = true
-
-        /// Install an uncaught exception handler to log crashes and detect previous-session crashes on next launch.
-        public var shouldDetectCrashes: Bool = true
 
         /// Enable shake-to-share: shaking the device presents a share sheet with log files. UIKit only.
         public var enableShakeToShare: Bool = false
@@ -255,7 +254,7 @@ public final class EasyLogger: @unchecked Sendable {
 
         if shakeConfigChanged || new.enableShakeToShare {
             Task { @MainActor in
-                (self.shakeToShareHandler as? ShakeToShareHandler)?.setupShakeToShare()
+                self.shakeToShareHandler?.setupShakeToShare()
             }
         }
     }
@@ -280,6 +279,10 @@ public final class EasyLogger: @unchecked Sendable {
 
         let messageString = message()
         let isProduction = self.environment == .production
+        // Redaction happens HERE, before the value crosses the pipeline/actor boundary. The
+        // `[String: String]` carried by `LogRecord` is therefore already redacted, so everything
+        // downstream — the in-app viewer's in-memory buffer (via `addLogEntry`) and the formatted
+        // on-disk files exported by `shareLogFiles` — only ever sees redacted metadata.
         let redacted: [String: String]? = metadata?.redactedDictionary(isProduction: isProduction)
         let record = LogRecord(
             messageString: messageString,
@@ -301,16 +304,10 @@ public final class EasyLogger: @unchecked Sendable {
         await pipeline.flush()
     }
 
-    func applicationWillTerminate() {
-        Task {
-            await loggingActor.applicationWillTerminate(crashFlagKey: self.crashFlagKey)
-        }
-    }
-
     func applicationDidFinishLaunching() {
         #if canImport(UIKit)
         Task { @MainActor in
-            (self.shakeToShareHandler as? ShakeToShareHandler)?.setupShakeToShare()
+            self.shakeToShareHandler?.setupShakeToShare()
         }
         #endif
     }

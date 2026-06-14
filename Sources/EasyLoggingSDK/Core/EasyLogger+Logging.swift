@@ -99,6 +99,10 @@ extension EasyLogger {
         logInternalMessage(message, level: .error, metadata: metadata)
     }
 
+    // Internal logging is for SDK-emitted diagnostics only. Metadata here is always
+    // SDK-controlled (e.g. an error description), never caller-supplied secrets, so — unlike the
+    // public `log` path — it does not run through redaction. Do not route user data through the
+    // `internal*` methods.
     private func logInternalMessage(_ message: String, level: LogLevel, metadata: [String: String]?) {
         let config = self.configuration
         let record = LogRecord(
