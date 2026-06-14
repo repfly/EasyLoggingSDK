@@ -5,29 +5,75 @@ import Foundation
 /// This class is **opt-in only** — it never swizzles global state.
 /// Use ``EasyLogger/networkLoggingSessionConfiguration()`` to get a pre-configured
 /// `URLSessionConfiguration`, or register ``NetworkLoggerURLProtocol`` manually.
+///
+/// ## Known limitations
+/// `URLProtocol`-based interception has inherent constraints:
+/// - It does **not** intercept requests issued on background `URLSessionConfiguration`s.
+/// - It can interfere with request bodies provided as streams (`httpBodyStream`) and with
+///   requests that are re-issued (e.g. redirects), since the body is consumed once.
+/// - It only observes requests on sessions explicitly configured with
+///   ``NetworkLoggerURLProtocol``; it never sees traffic from other sessions.
+///
+/// ## Privacy
+/// The full URL and any `Authorization`/`Cookie`/`Set-Cookie` header values are captured with
+/// ``RedactionLevel/auto``, which only masks them in the `.production` environment. In any
+/// non-production build these are written to the log files in plaintext — do **not** ship a
+/// non-production logging build to external testers with live credentials.
 public actor NetworkLogger {
 
     // MARK: - Singleton
 
     public static let shared = NetworkLogger()
 
-    // MARK: - Properties
-
-    private var pendingRequests: [URLRequest: CFAbsoluteTime] = [:]
-
     private init() {}
+
+    /// The formatted, redaction-aware result of inspecting a completed request.
+    struct LogEntry: Sendable {
+        let message: String
+        let level: LogLevel
+        let metadata: LogMetadata
+    }
 
     // MARK: - Tracking
 
-    func requestStarted(_ request: URLRequest) {
-        pendingRequests[request] = CFAbsoluteTimeGetCurrent()
+    /// Formats, redacts, and logs a completed request.
+    ///
+    /// Timing is measured on the ``NetworkLoggerURLProtocol`` instance and passed in as
+    /// `duration`, so the actor holds no shared mutable timing state. Only `Sendable` values
+    /// (the request, response, data, error, and a `Double` duration) cross the actor boundary.
+    func requestCompleted(
+        _ request: URLRequest,
+        response: URLResponse?,
+        data: Data?,
+        error: Error?,
+        duration: TimeInterval
+    ) {
+        let entry = Self.makeLogEntry(
+            request: request,
+            response: response,
+            data: data,
+            error: error,
+            duration: duration
+        )
+        EasyLogger.shared.log(
+            entry.message,
+            level: entry.level,
+            category: "network",
+            metadata: entry.metadata
+        )
     }
 
-    func requestCompleted(_ request: URLRequest, response: URLResponse?, data: Data?, error: Error?) {
-        let endTime = CFAbsoluteTimeGetCurrent()
-        let startTime = pendingRequests.removeValue(forKey: request)
-
-        let duration = startTime.map { endTime - $0 } ?? 0
+    /// Builds the `(message, level, metadata)` for a completed request.
+    ///
+    /// Pure and side-effect-free so it can be unit-tested directly. The message is the
+    /// never-redacted, query-stripped form; the full URL lives only in redactable metadata.
+    static func makeLogEntry(
+        request: URLRequest,
+        response: URLResponse?,
+        data: Data?,
+        error: Error?,
+        duration: TimeInterval
+    ) -> LogEntry {
         let httpResponse = response as? HTTPURLResponse
 
         let method = request.httpMethod ?? "GET"
@@ -44,6 +90,8 @@ public actor NetworkLogger {
             return components.string ?? requestURL.path
         }()
         let statusCode = httpResponse?.statusCode ?? 0
+        // Raw byte counts for machine-parseable diagnostics. Request size comes from the
+        // original request body; response size from the received data.
         let requestSize = request.httpBody?.count ?? 0
         let responseSize = data?.count ?? 0
 
@@ -51,19 +99,20 @@ public actor NetworkLogger {
             "method": method,
             "status_code": statusCode,
             "duration_ms": String(format: "%.1f", duration * 1000),
-            "request_size": ByteCountFormatter.string(fromByteCount: Int64(requestSize), countStyle: .memory),
-            "response_size": ByteCountFormatter.string(fromByteCount: Int64(responseSize), countStyle: .memory)
+            "request_size": requestSize as Int,
+            "response_size": responseSize as Int
         ]
 
         // The full URL may carry query tokens; redact in production.
         metadata.setRedactable(url, forKey: "url", redaction: .auto)
 
-        // Capture sensitive auth headers as redactable when present.
-        for headerKey in ["Authorization", "Cookie", "Set-Cookie"] {
+        // Capture sensitive auth headers from the request as redactable when present.
+        for headerKey in ["Authorization", "Cookie"] {
             if let value = request.value(forHTTPHeaderField: headerKey) {
                 metadata.setRedactable(value, forKey: headerKey.lowercased(), redaction: .auto)
             }
         }
+        // Set-Cookie is a response header.
         if let setCookie = httpResponse?.value(forHTTPHeaderField: "Set-Cookie") {
             metadata.setRedactable(setCookie, forKey: "set-cookie", redaction: .auto)
         }
@@ -86,7 +135,7 @@ public actor NetworkLogger {
             message = "\(method) \(safeURL) → \(statusCode) (\(String(format: "%.0fms", duration * 1000)))"
         }
 
-        EasyLogger.shared.log(message, level: level, category: "network", metadata: metadata)
+        return LogEntry(message: message, level: level, metadata: metadata)
     }
 }
 
@@ -97,17 +146,26 @@ public actor NetworkLogger {
 /// Registered automatically when you use ``EasyLogger/networkLoggingSessionConfiguration()``.
 /// You can also register it manually on any `URLSessionConfiguration`.
 ///
+/// ## Known limitations
+/// As a `URLProtocol`, this class does **not** intercept background `URLSessionConfiguration`s,
+/// can interfere with request bodies provided as streams (`httpBodyStream`) and re-issued
+/// requests (the body is consumed once), and only sees requests on sessions configured with this
+/// protocol.
+///
 /// This is intentionally **not** `Sendable`: a `URLProtocol` subclass is created and driven by
 /// `URLSession` on its own serialized context. Its mutable stored state (`dataTask`,
-/// `receivedData`, `internalSession`) is only ever touched from `URLProtocol`'s own
-/// start/stop callbacks and the internal session's delegate callbacks, which `URLSession`
-/// serializes. To avoid inheriting a `Sendable` requirement from `URLSessionDataDelegate`
-/// (whose ancestor `URLSessionDelegate` is `Sendable`), the delegate work is delegated to a
-/// separate ``SessionDelegate`` object rather than conforming `self`.
+/// `internalSession`, `startTime`) is only ever touched from `URLProtocol`'s own start/stop
+/// callbacks and the internal session's delegate callbacks, which `URLSession` serializes. To
+/// avoid inheriting a `Sendable` requirement from `URLSessionDataDelegate` (whose ancestor
+/// `URLSessionDelegate` is `Sendable`), the delegate work is delegated to a separate
+/// ``SessionDelegate`` object rather than conforming `self`.
 public final class NetworkLoggerURLProtocol: URLProtocol {
 
     private var dataTask: URLSessionDataTask?
     private let sessionDelegate = SessionDelegate()
+    /// Captured when `startLoading` begins; the request duration is computed against this on the
+    /// instance itself, so the logging actor never needs to track per-request start times.
+    private var startTime: CFAbsoluteTime = 0
     private lazy var internalSession: URLSession = {
         let config = URLSessionConfiguration.default
         return URLSession(configuration: config, delegate: sessionDelegate, delegateQueue: nil)
@@ -128,13 +186,16 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
 
     override public func startLoading() {
         guard let mutableRequest = (request as NSURLRequest).mutableCopy() as? NSMutableURLRequest else {
+            // Practically unreachable, but never leave the request hanging: tell the client it
+            // failed rather than returning silently (which would emit no start/finish).
+            let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorUnknown)
+            client?.urlProtocol(self, didFailWithError: error)
             return
         }
         URLProtocol.setProperty(true, forKey: Constants.handledKey, in: mutableRequest)
 
-        // Capture the Sendable request locally so the Task closure does not capture `self`.
-        let startedRequest = request
-        Task { await NetworkLogger.shared.requestStarted(startedRequest) }
+        // Start the clock on the instance — no shared timing state in the actor.
+        startTime = CFAbsoluteTimeGetCurrent()
 
         // Wire the delegate back to this protocol instance so it can forward to `client`.
         sessionDelegate.owner = self
@@ -144,6 +205,9 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
 
     override public func stopLoading() {
         dataTask?.cancel()
+        // URLSession strongly retains its delegate until invalidated. Invalidate so the internal
+        // session and its delegate are released.
+        internalSession.invalidateAndCancel()
     }
 
     // MARK: - Client forwarding (called by SessionDelegate on the session's context)
@@ -157,13 +221,16 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
     }
 
     fileprivate func didComplete(request: URLRequest, response: URLResponse?, data: Data, error: Error?) {
-        // Only Sendable values cross the actor boundary into the logging actor.
+        // Compute the duration on the instance; only Sendable values (including the Double
+        // duration) cross the actor boundary into the logging actor.
+        let duration = CFAbsoluteTimeGetCurrent() - startTime
         Task {
             await NetworkLogger.shared.requestCompleted(
                 request,
                 response: response,
                 data: data,
-                error: error
+                error: error,
+                duration: duration
             )
         }
 
@@ -172,6 +239,10 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
         } else {
             client?.urlProtocolDidFinishLoading(self)
         }
+
+        // Release the internal session and its delegate now that the request is finished.
+        // `finishTasksAndInvalidate` lets the (already complete) task drain cleanly.
+        internalSession.finishTasksAndInvalidate()
     }
 
     private enum Constants {

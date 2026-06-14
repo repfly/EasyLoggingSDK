@@ -200,7 +200,17 @@ actor LoggingActor {
         guard let logFileManager = fileLogger?.logFileManager else { return }
         let logFiles = logFileManager.sortedLogFileInfos
         for logFileInfo in logFiles {
-            try? FileManager.default.removeItem(atPath: logFileInfo.filePath)
+            do {
+                try FileManager.default.removeItem(atPath: logFileInfo.filePath)
+            } catch {
+                // Continue removing the remaining files, but surface the failure so it is
+                // diagnosable. `internalWarning` enqueues onto the serial pipeline and never
+                // blocks, so this is safe from inside the actor.
+                EasyLogger.shared.internalWarning(
+                    "LoggingActor: failed to remove a log file.",
+                    metadata: ["error": error.localizedDescription]
+                )
+            }
         }
     }
 
