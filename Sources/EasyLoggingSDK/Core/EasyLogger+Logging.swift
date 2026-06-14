@@ -79,13 +79,17 @@ extension EasyLogger {
 
     private func logInternalMessage(_ message: String, level: LogLevel, metadata: [String: String]?) {
         let config = self.configuration
-        Task {
-            await self.loggingActor.logInternal(
-                message: message,
-                level: level,
-                metadata: metadata,
-                config: config
-            )
-        }
+        let record = LogRecord(
+            messageString: message,
+            level: level,
+            category: nil,
+            metadata: metadata,
+            file: "",
+            function: "",
+            line: 0,
+            config: config,
+            isInternal: true
+        )
+        pipeline.enqueue(.record(record))
     }
 }

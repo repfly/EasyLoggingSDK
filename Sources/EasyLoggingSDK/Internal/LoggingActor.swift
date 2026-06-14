@@ -19,7 +19,31 @@ actor LoggingActor {
 
     // MARK: - Log Dispatch
 
-    func log(
+    /// Single serialized entry point for log records. Branches on `record.isInternal` to choose
+    /// between the public and clean internal-format paths.
+    func process(_ record: LogRecord) {
+        if record.isInternal {
+            logInternal(
+                message: record.messageString,
+                level: record.level,
+                metadata: record.metadata,
+                config: record.config
+            )
+        } else {
+            log(
+                messageString: record.messageString,
+                level: record.level,
+                category: record.category,
+                metadata: record.metadata,
+                file: record.file,
+                function: record.function,
+                line: record.line,
+                config: record.config
+            )
+        }
+    }
+
+    private func log(
         messageString: String,
         level: LogLevel,
         category: String?,
@@ -66,7 +90,7 @@ actor LoggingActor {
         }
     }
 
-    func logInternal(
+    private func logInternal(
         message: String,
         level: LogLevel,
         metadata: [String: String]?,
@@ -185,6 +209,13 @@ actor LoggingActor {
     func currentLogFileURL() -> URL? {
         guard let filePath = fileLogger?.currentLogFileInfo?.filePath else { return nil }
         return URL(fileURLWithPath: filePath)
+    }
+
+    /// Returns the file paths of all rotated log files, newest first.
+    ///
+    /// The `DDFileLogger` never leaves the actor; only the resolved paths are returned.
+    func logFilePaths() -> [String] {
+        fileLogger?.logFileManager.sortedLogFileInfos.map(\.filePath) ?? []
     }
 
     // MARK: - Crash Detection

@@ -78,7 +78,11 @@ public final class InAppLogViewer {
     func configure(isEnabled: Bool, activationGesture: ActivationGesture, maxLogEntries: Int) {
         self.isEnabled = isEnabled
         self.activationGesture = activationGesture
-        self.maxLogEntries = maxLogEntries
+        // `maxLogEntries` is read under the lock by the nonisolated `addLogEntry`, so write it
+        // under the same lock to avoid a data race.
+        logEntriesLock.withLock {
+            self.maxLogEntries = maxLogEntries
+        }
 
         if isEnabled {
             setupGestureRecognition()
@@ -120,19 +124,15 @@ public final class InAppLogViewer {
 // MARK: - Log Parsing & Filtering
 
 extension InAppLogViewer {
-    func loadLogEntriesFromFiles() -> [LogEntry] {
+    func loadLogEntriesFromFiles() async -> [LogEntry] {
         guard let logger = self.logger else { return [] }
 
-        guard let fileLogger = logger.internalFileLogger else {
-            return []
-        }
+        // The `DDFileLogger` stays on the actor; we only receive resolved file paths.
+        let paths = await logger.getLogFilePaths()
 
         var allEntries: [LogEntry] = []
-        let logFileManager = fileLogger.logFileManager
-        let logFileInfos = logFileManager.sortedLogFileInfos
-
-        for logFileInfo in logFileInfos {
-            let entries = parseLogFile(at: logFileInfo.filePath)
+        for path in paths {
+            let entries = parseLogFile(at: path)
             allEntries.append(contentsOf: entries)
         }
 
@@ -306,14 +306,14 @@ extension InAppLogViewer {
     }()
 
     /// Get all log entries (memory + files) with optional filtering
-    func getAllLogEntries(searchText: String? = nil, levels: Set<LogLevel>? = nil, category: String? = nil) -> [LogEntry] {
+    func getAllLogEntries(searchText: String? = nil, levels: Set<LogLevel>? = nil, category: String? = nil) async -> [LogEntry] {
         var allEntries: [LogEntry] = []
 
         logEntriesLock.withLock {
             allEntries.append(contentsOf: self.logEntries)
         }
 
-        allEntries.append(contentsOf: loadLogEntriesFromFiles())
+        allEntries.append(contentsOf: await loadLogEntriesFromFiles())
         allEntries = removeDuplicateEntries(allEntries)
         allEntries.sort { $0.timestamp > $1.timestamp }
 

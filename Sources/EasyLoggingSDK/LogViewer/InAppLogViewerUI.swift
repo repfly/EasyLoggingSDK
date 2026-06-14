@@ -52,25 +52,21 @@ final class LogViewerViewController: UIViewController,
     private func loadAllLogEntries() {
         guard let logViewer = self.logViewer else { return }
 
-        DispatchQueue.main.async {
-            let loadingIndicator = UIActivityIndicatorView(style: .medium)
-            loadingIndicator.startAnimating()
-            self.navigationItem.titleView = loadingIndicator
-        }
+        let loadingIndicator = UIActivityIndicatorView(style: .medium)
+        loadingIndicator.startAnimating()
+        self.navigationItem.titleView = loadingIndicator
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            let entries = logViewer.getAllLogEntries(
+        Task { @MainActor in
+            let entries = await logViewer.getAllLogEntries(
                 searchText: self.searchText.isEmpty ? nil : self.searchText,
                 levels: self.selectedLevels
             )
 
-            DispatchQueue.main.async {
-                self.allLogEntries = entries
-                self.filteredEntries = entries
-                self.tableView.reloadData()
-                self.navigationItem.titleView = nil
-                self.title = "QA Log Viewer (\(self.allLogEntries.count) entries)"
-            }
+            self.allLogEntries = entries
+            self.filteredEntries = entries
+            self.tableView.reloadData()
+            self.navigationItem.titleView = nil
+            self.title = "QA Log Viewer (\(self.allLogEntries.count) entries)"
         }
     }
 
@@ -122,8 +118,11 @@ final class LogViewerViewController: UIViewController,
         guard let logViewer = self.logViewer else { return }
         let searchQuery = searchText.isEmpty ? nil : searchText
         let levelFilter = selectedLevels.isEmpty ? nil : selectedLevels
-        self.filteredEntries = logViewer.getAllLogEntries(searchText: searchQuery, levels: levelFilter)
-        DispatchQueue.main.async {
+        Task { @MainActor in
+            self.filteredEntries = await logViewer.getAllLogEntries(
+                searchText: searchQuery,
+                levels: levelFilter
+            )
             self.tableView.reloadData()
             self.title = "QA Log Viewer (\(self.filteredEntries.count) entries)"
         }
@@ -132,11 +131,13 @@ final class LogViewerViewController: UIViewController,
     @objc private func closeButtonTapped() { dismiss(animated: true) }
 
     @objc private func shareButtonTapped() {
-        if let logger = self.logViewer?.currentLogger,
-           let logFileURL = logger.currentLogFileURL {
-            shareLogFile(logFileURL)
-        } else {
-            shareLogEntries()
+        Task { @MainActor in
+            if let logger = self.logViewer?.currentLogger,
+               let logFileURL = await logger.getCurrentLogFileURL() {
+                self.shareLogFile(logFileURL)
+            } else {
+                self.shareLogEntries()
+            }
         }
     }
 

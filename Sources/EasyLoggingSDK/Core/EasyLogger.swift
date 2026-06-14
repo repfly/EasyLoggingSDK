@@ -1,4 +1,3 @@
-import CocoaLumberjack
 import Foundation
 import Logging
 
@@ -11,6 +10,9 @@ public final class EasyLogger: @unchecked Sendable {
 
     let loggingActor = LoggingActor()
 
+    /// Serializes all logging work (records, configuration applies, flush markers) in FIFO order.
+    let pipeline: SerialLogPipeline
+
     let crashFlagKey = LoggingConstants.UserDefaultsKey.crashFlag
     let environmentKey = LoggingConstants.UserDefaultsKey.environment
     var _configuration: Configuration
@@ -20,20 +22,6 @@ public final class EasyLogger: @unchecked Sendable {
 
     #if canImport(UIKit)
     var _logViewer: InAppLogViewer!
-
-    /// Internal access to the file logger for ``InAppLogViewer`` file history.
-    ///
-    /// This bridges to ``LoggingActor`` synchronously and is intended for UI-triggered reads.
-    var internalFileLogger: DDFileLogger? {
-        var result: DDFileLogger?
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            result = await loggingActor.fileLogger
-            semaphore.signal()
-        }
-        semaphore.wait()
-        return result
-    }
 
     // UIKit-related handlers (typed as `Any` to keep the core target free of UIKit at the type level).
     var lifecycleManager: Any?
@@ -61,7 +49,7 @@ public final class EasyLogger: @unchecked Sendable {
                 self._configuration = newValue
                 return old
             }
-            Task { await self.loggingActor.applyConfiguration(newValue) }
+            pipeline.enqueue(.applyConfiguration(newValue))
             #if canImport(UIKit)
             applyUIKitConfiguration(previous: previous, new: newValue)
             #endif
@@ -77,20 +65,42 @@ public final class EasyLogger: @unchecked Sendable {
 
     private init() {
         let savedEnvironment = UserDefaults.standard.string(forKey: environmentKey)
-        self._currentEnvironment = LogEnvironment(rawValue: savedEnvironment ?? "") ?? .development
-        self._configuration = self._currentEnvironment.defaultConfiguration
+        let environment = LogEnvironment(rawValue: savedEnvironment ?? "") ?? .development
+        let initialConfiguration = environment.defaultConfiguration
+        self._currentEnvironment = environment
+        self._configuration = initialConfiguration
+
+        // The pipeline routes every event to the actor in strict FIFO order. It is created
+        // first so that any early logs/config applies are ordered behind the initial setup.
+        let actor = loggingActor
+        self.pipeline = SerialLogPipeline { event in
+            switch event {
+            case let .record(record):
+                await actor.process(record)
+            case let .applyConfiguration(configuration):
+                await actor.applyConfiguration(configuration)
+            case .flush:
+                // Resumed by the pipeline's consumer loop itself; never forwarded here.
+                break
+            }
+        }
 
         #if canImport(UIKit)
         self._logViewer = InAppLogViewer(logger: self)
         #endif
 
-        Task { [config = self._configuration] in
-            #if canImport(UIKit)
-            await self.loggingActor.setLogViewer(self._logViewer)
-            #endif
-            await self.loggingActor.applyConfiguration(config)
-            await self.loggingActor.setupCrashDetection(with: config)
-            self.detectPreviousCrash()
+        // Initial configuration is enqueued through the pipeline so it is ordered ahead of any
+        // early logs. Crash-detection setup runs in its own Task (it only installs an idempotent
+        // exception handler, so it does not need to be ordered relative to log records).
+        #if canImport(UIKit)
+        Task { [actor, logViewer = _logViewer] in
+            await actor.setLogViewer(logViewer!)
+        }
+        #endif
+        pipeline.enqueue(.applyConfiguration(initialConfiguration))
+        Task { [actor, weak self] in
+            await actor.setupCrashDetection(with: initialConfiguration)
+            self?.detectPreviousCrash()
         }
 
         setupUIKitIntegrationsIfAvailable()
@@ -119,9 +129,7 @@ public final class EasyLogger: @unchecked Sendable {
         let config = customConfiguration ?? environment.defaultConfiguration
         _lock.withLock { self._configuration = config }
 
-        Task {
-            await self.loggingActor.applyConfiguration(config)
-        }
+        pipeline.enqueue(.applyConfiguration(config))
 
         #if canImport(UIKit)
         applyUIKitConfiguration(previous: previous, new: config)
@@ -206,9 +214,7 @@ public final class EasyLogger: @unchecked Sendable {
     public func configure(_ configuration: Configuration) {
         let previous = self.configuration
         _lock.withLock { self._configuration = configuration }
-        Task {
-            await self.loggingActor.applyConfiguration(configuration)
-        }
+        pipeline.enqueue(.applyConfiguration(configuration))
         #if canImport(UIKit)
         applyUIKitConfiguration(previous: previous, new: configuration)
         #endif
@@ -270,18 +276,24 @@ public final class EasyLogger: @unchecked Sendable {
         let messageString = message()
         let isProduction = self.environment == .production
         let redacted: [String: String]? = metadata?.redactedDictionary(isProduction: isProduction)
-        Task {
-            await self.loggingActor.log(
-                messageString: messageString,
-                level: level,
-                category: category,
-                metadata: redacted,
-                file: file,
-                function: function,
-                line: line,
-                config: config
-            )
-        }
+        let record = LogRecord(
+            messageString: messageString,
+            level: level,
+            category: category,
+            metadata: redacted,
+            file: file,
+            function: function,
+            line: line,
+            config: config,
+            isInternal: false
+        )
+        pipeline.enqueue(.record(record))
+    }
+
+    /// Awaits until all previously enqueued log records and configuration applies have been
+    /// fully processed and delivered. Use this to guarantee logs are flushed (e.g. before exit).
+    public func flush() async {
+        await pipeline.flush()
     }
 
     func applicationWillTerminate() {

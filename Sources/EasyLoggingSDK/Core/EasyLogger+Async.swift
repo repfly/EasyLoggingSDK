@@ -27,7 +27,7 @@ public extension EasyLogger {
 
         let evaluatedMessage = message()
         let redacted: [String: String]? = metadata?.redactedDictionary(isProduction: self.environment == .production)
-        await loggingActor.log(
+        let record = LogRecord(
             messageString: evaluatedMessage,
             level: level,
             category: category,
@@ -35,8 +35,13 @@ public extension EasyLogger {
             file: file,
             function: function,
             line: line,
-            config: config
+            config: config,
+            isInternal: false
         )
+        // Enqueue through the pipeline (preserving FIFO ordering relative to sync logs and
+        // config applies), then flush so the line is delivered before this call returns.
+        pipeline.enqueue(.record(record))
+        await pipeline.flush()
     }
 
     /// Asynchronously logs a debug message
@@ -122,7 +127,8 @@ public extension EasyLogger {
     /// Asynchronously configures the logger
     func configureAsync(_ configuration: Configuration) async {
         _lock.withLock { self._configuration = configuration }
-        await loggingActor.applyConfiguration(configuration)
+        pipeline.enqueue(.applyConfiguration(configuration))
+        await pipeline.flush()
     }
 
     /// Asynchronously sets up the environment
@@ -135,6 +141,7 @@ public extension EasyLogger {
 
         let config = customConfiguration ?? environment.defaultConfiguration
         _lock.withLock { self._configuration = config }
-        await loggingActor.applyConfiguration(config)
+        pipeline.enqueue(.applyConfiguration(config))
+        await pipeline.flush()
     }
 }
