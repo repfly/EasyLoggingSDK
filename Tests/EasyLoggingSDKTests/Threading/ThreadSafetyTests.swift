@@ -17,7 +17,7 @@ final class ThreadSafetyTests: XCTestCase {
                 var config = EasyLogger.Configuration()
                 config.minimumLogLevel = i % 2 == 0 ? .debug : .error
                 config.maxFileSize = UInt64(i)
-                EasyLogger.shared.configuration = config
+                EasyLogger.shared.configure(config)
                 group.leave()
             }
         }
@@ -53,7 +53,7 @@ final class ThreadSafetyTests: XCTestCase {
         for i in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
-                EasyLogger.shared.environment = environments[i % environments.count]
+                EasyLogger.shared.setEnvironment(environments[i % environments.count])
                 group.leave()
             }
         }
@@ -80,7 +80,7 @@ final class ThreadSafetyTests: XCTestCase {
         let iterations = 1000
         let group = DispatchGroup()
 
-        let levels: [LogLevel] = [.debug, .info, .warning, .error]
+        let levels: [LogLevel] = [.trace, .debug, .info, .warning, .error, .critical]
 
         for i in 0..<iterations {
             group.enter()

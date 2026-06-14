@@ -8,7 +8,7 @@ final class NetworkLoggerTests: XCTestCase {
     func testNetworkLoggingSessionConfigurationInsertsProtocol() {
         var config = EasyLogger.Configuration()
         config.enableNetworkLogging = true
-        EasyLogger.shared.configuration = config
+        EasyLogger.shared.configure(config)
 
         let configWithLogging = EasyLogger.shared.networkLoggingSessionConfiguration()
 
@@ -20,7 +20,7 @@ final class NetworkLoggerTests: XCTestCase {
     func testNetworkLoggingSessionConfigurationPreservesExistingProtocols() {
         var loggerConfig = EasyLogger.Configuration()
         loggerConfig.enableNetworkLogging = true
-        EasyLogger.shared.configuration = loggerConfig
+        EasyLogger.shared.configure(loggerConfig)
 
         let base = URLSessionConfiguration.default
         let originalCount = (base.protocolClasses ?? []).count
@@ -34,7 +34,7 @@ final class NetworkLoggerTests: XCTestCase {
     func testNetworkLoggingSessionConfigurationSkipsProtocolWhenDisabled() {
         var config = EasyLogger.Configuration()
         config.enableNetworkLogging = false
-        EasyLogger.shared.configuration = config
+        EasyLogger.shared.configure(config)
 
         let base = URLSessionConfiguration.default
         let originalCount = (base.protocolClasses ?? []).count

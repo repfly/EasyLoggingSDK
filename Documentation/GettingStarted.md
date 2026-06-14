@@ -30,10 +30,10 @@ No additional setup is needed — the SDK hooks into the UIKit lifecycle automat
 
 ### Environment Presets
 
-Call `setupEnvironment` once at launch. The setting persists across launches.
+Call `setEnvironment` once at launch. The setting persists across launches.
 
 ```swift
-logger.setupEnvironment(.production)
+logger.setEnvironment(.production)
 ```
 
 | Environment    | Min Level | Console | File | Crash Detection | Extras |
@@ -56,13 +56,15 @@ logger.configure(config)
 
 ### Logging & Levels
 
-Four levels, ordered by severity: `debug`, `info`, `warning`, `error`.
+Six levels, ordered by severity: `trace`, `debug`, `info`, `warning`, `error`, `critical`.
 
 ```swift
+logger.trace("Entering function")
 logger.debug("Cache hit")
 logger.info("User signed in")
 logger.warning("Disk space low")
 logger.error("Failed to save")
+logger.critical("Unrecoverable state")
 ```
 
 Messages use `@autoclosure` so expensive interpolations are only evaluated when the level is enabled.
@@ -235,12 +237,15 @@ logger.removeAllLogFiles()
 
 ## Async / Await
 
-Every logging and configuration method has an `async` variant:
+Logging and configuration methods provide same-name `async` overloads. In an `async` context,
+call them with `await` and the async overload is selected automatically; the call returns only
+after the work has been flushed and delivered.
 
 ```swift
-await logger.infoAsync("Background work done")
-await logger.configureAsync(config)
-await logger.setupEnvironmentAsync(.production)
+await logger.info("Background work done")
+await logger.configure(config)
+await logger.setEnvironment(.production)
+await logger.flush()
 ```
 
 ## Best Practices

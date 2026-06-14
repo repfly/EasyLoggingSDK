@@ -54,10 +54,12 @@ public final class InAppLogViewer {
 
         var levelColor: UIColor {
             switch level {
+            case .trace: return .systemGray2
             case .debug: return .systemGray
             case .info: return .systemBlue
             case .warning: return .systemOrange
             case .error: return .systemRed
+            case .critical: return .systemPurple
             }
         }
 
@@ -339,7 +341,7 @@ extension InAppLogViewer {
         if let searchText = searchText, !searchText.isEmpty {
             filteredEntries = filteredEntries.filter { entry in
                 entry.message.localizedCaseInsensitiveContains(searchText) ||
-                entry.level.stringValue.localizedCaseInsensitiveContains(searchText) ||
+                entry.level.description.localizedCaseInsensitiveContains(searchText) ||
                 (entry.category?.localizedCaseInsensitiveContains(searchText) ?? false) ||
                 (entry.metadata?.values.contains { $0.localizedCaseInsensitiveContains(searchText) } ?? false)
             }

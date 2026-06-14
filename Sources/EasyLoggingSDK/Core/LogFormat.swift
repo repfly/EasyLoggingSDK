@@ -100,7 +100,7 @@ public struct LogFormat: Sendable {
     ) -> String {
         // Ordered longest-first so the matcher resolves %levelRaw before %level.
         let placeholders: [(token: String, value: String)] = [
-            ("%levelRaw", level.stringValue),
+            ("%levelRaw", level.description),
             ("%level", Self.decoratedLevel(level)),
             ("%category", category ?? ""),
             ("%metadata", formatMetadata(metadata)),
@@ -183,7 +183,7 @@ public struct LogFormat: Sendable {
 
         let payload = JSONPayload(
             timestamp: Self.iso8601Formatter.string(from: Date()),
-            level: level.stringValue,
+            level: level.description,
             file: (file as NSString).lastPathComponent,
             line: line,
             function: function,
@@ -205,10 +205,12 @@ public struct LogFormat: Sendable {
     /// deliberately lives in the formatter rather than on the `LogLevel` domain enum.
     private static func decoratedLevel(_ level: LogLevel) -> String {
         switch level {
+        case .trace: return "🔬 TRACE"
         case .debug: return "🔍 DEBUG"
         case .info: return "ℹ️ INFO"
         case .warning: return "⚠️ WARNING"
         case .error: return "❌ ERROR"
+        case .critical: return "🛑 CRITICAL"
         }
     }
 

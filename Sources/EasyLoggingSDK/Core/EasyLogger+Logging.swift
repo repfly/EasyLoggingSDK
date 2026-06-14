@@ -4,6 +4,17 @@ import Foundation
 // MARK: - Convenience Methods
 
 public extension EasyLogger {
+    func trace(
+        _ message: @autoclosure () -> String,
+        category: String? = nil,
+        metadata: LogMetadata? = nil,
+        file: String = #file,
+        function: String = #function,
+        line: Int = #line
+    ) {
+        log(message(), level: .trace, category: category, metadata: metadata, file: file, function: function, line: line)
+    }
+
     func debug(
         _ message: @autoclosure () -> String,
         category: String? = nil,
@@ -46,6 +57,17 @@ public extension EasyLogger {
         line: Int = #line
     ) {
         log(message(), level: .error, category: category, metadata: metadata, file: file, function: function, line: line)
+    }
+
+    func critical(
+        _ message: @autoclosure () -> String,
+        category: String? = nil,
+        metadata: LogMetadata? = nil,
+        file: String = #file,
+        function: String = #function,
+        line: Int = #line
+    ) {
+        log(message(), level: .critical, category: category, metadata: metadata, file: file, function: function, line: line)
     }
 
     /// Returns whether the given log level is enabled under the current configuration.

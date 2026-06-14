@@ -54,25 +54,16 @@ public final class EasyLogger: @unchecked Sendable {
         _lock.withLock { self._configuration.enableShakeToShare }
     }
 
-    // Thread-safe configuration access using unfair lock.
+    /// The current configuration. Get-only; apply changes via ``configure(_:)`` or
+    /// ``setEnvironment(_:configuration:)``. Reads are lock-guarded.
     public var configuration: Configuration {
-        get { _lock.withLock { self._configuration } }
-        set {
-            let previous = _lock.withLock {
-                let old = self._configuration
-                self._configuration = newValue
-                return old
-            }
-            pipeline.enqueue(.applyConfiguration(newValue))
-            #if canImport(UIKit)
-            applyUIKitConfiguration(previous: previous, new: newValue)
-            #endif
-        }
+        _lock.withLock { self._configuration }
     }
 
+    /// The active environment. Get-only; change it via ``setEnvironment(_:configuration:)`` so
+    /// persistence, configuration apply, and UIKit reconfiguration always happen together.
     public var environment: LogEnvironment {
-        get { _lock.withLock { self._currentEnvironment } }
-        set { _lock.withLock { self._currentEnvironment = newValue } }
+        _lock.withLock { self._currentEnvironment }
     }
 
     // MARK: - Initialization
@@ -133,20 +124,25 @@ public final class EasyLogger: @unchecked Sendable {
 
     // MARK: - Configuration
 
-    public func setupEnvironment(_ environment: LogEnvironment, customConfiguration: Configuration? = nil) {
-        let previous = _lock.withLock {
-            self._currentEnvironment = environment
-            return self._configuration
-        }
+    public func setEnvironment(_ environment: LogEnvironment, configuration: Configuration? = nil) {
+        _lock.withLock { self._currentEnvironment = environment }
         UserDefaults.standard.set(environment.rawValue, forKey: self.environmentKey)
+        applyConfigurationChange(configuration ?? environment.defaultConfiguration)
+    }
 
-        let config = customConfiguration ?? environment.defaultConfiguration
-        _lock.withLock { self._configuration = config }
-
-        pipeline.enqueue(.applyConfiguration(config))
-
+    /// The single chokepoint for applying a configuration: swaps the lock-guarded configuration,
+    /// orders the apply through the pipeline (preserving FIFO with logs), and reconfigures the
+    /// UIKit integrations. Both the sync and async `configure`/`setEnvironment` entry points route
+    /// through here so their side effects can never drift apart.
+    func applyConfigurationChange(_ new: Configuration) {
+        let previous = _lock.withLock { () -> Configuration in
+            let old = self._configuration
+            self._configuration = new
+            return old
+        }
+        pipeline.enqueue(.applyConfiguration(new))
         #if canImport(UIKit)
-        applyUIKitConfiguration(previous: previous, new: config)
+        applyUIKitConfiguration(previous: previous, new: new)
         #endif
     }
 
@@ -154,7 +150,7 @@ public final class EasyLogger: @unchecked Sendable {
     ///
     /// Use environment presets for quick setup:
     /// ```swift
-    /// EasyLogger.shared.setupEnvironment(.production)
+    /// EasyLogger.shared.setEnvironment(.production)
     /// ```
     /// Or customize individual properties:
     /// ```swift
@@ -226,12 +222,7 @@ public final class EasyLogger: @unchecked Sendable {
 
     /// Applies a new configuration and reinitializes loggers and optional UIKit integrations.
     public func configure(_ configuration: Configuration) {
-        let previous = self.configuration
-        _lock.withLock { self._configuration = configuration }
-        pipeline.enqueue(.applyConfiguration(configuration))
-        #if canImport(UIKit)
-        applyUIKitConfiguration(previous: previous, new: configuration)
-        #endif
+        applyConfigurationChange(configuration)
     }
 
     #if canImport(UIKit)

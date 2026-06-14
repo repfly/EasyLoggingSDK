@@ -29,7 +29,7 @@ final class LogViewerViewController: UIViewController,
     private var allLogEntries: [InAppLogViewer.LogEntry] = []
     private let tableView = UITableView()
     private var filteredEntries: [InAppLogViewer.LogEntry] = []
-    private var selectedLevels: Set<LogLevel> = [.debug, .info, .warning, .error]
+    private var selectedLevels: Set<LogLevel> = [.trace, .debug, .info, .warning, .error, .critical]
     private var searchText: String = ""
     private let searchController = UISearchController(searchResultsController: nil)
     weak var logViewer: InAppLogViewer?
@@ -174,7 +174,7 @@ final class LogViewerViewController: UIViewController,
     private func shareLogEntries() {
         var logText = "Log Entries\n\n"
         for entry in filteredEntries {
-            logText += "[\(entry.level.stringValue.uppercased())] "
+            logText += "[\(entry.level.description.uppercased())] "
             logText += "[\(entry.formattedTimestamp)] \(entry.message)\n"
             if let metadata = entry.metadata, !metadata.isEmpty {
                 logText += "Metadata: \(metadata)\n"
@@ -196,10 +196,10 @@ final class LogViewerViewController: UIViewController,
             message: "Select log levels to display",
             preferredStyle: .actionSheet
         )
-        for level in [LogLevel.debug, .info, .warning, .error] {
+        for level in [LogLevel.trace, .debug, .info, .warning, .error, .critical] {
             let isSelected = selectedLevels.contains(level)
             alert.addAction(UIAlertAction(
-                title: "\(isSelected ? "✓ " : "")Show \(level.stringValue.capitalized)",
+                title: "\(isSelected ? "✓ " : "")Show \(level.description.capitalized)",
                 style: .default
             ) { [weak self] _ in
                 guard let self else { return }
@@ -304,7 +304,7 @@ final class LogEntryCell: UITableViewCell {
     }
 
     func configure(with entry: InAppLogViewer.LogEntry) {
-        levelLabel.text = entry.level.stringValue.uppercased()
+        levelLabel.text = entry.level.description.uppercased()
         levelLabel.backgroundColor = entry.levelColor.withAlphaComponent(0.2)
         levelLabel.textColor = entry.levelColor
         sourceLabel.text = entry.sourceIcon
@@ -415,7 +415,7 @@ final class LogDetailViewController: UIViewController {
         container.translatesAutoresizingMaskIntoConstraints = false
         let badge = UILabel()
         badge.translatesAutoresizingMaskIntoConstraints = false
-        badge.text = logEntry.level.stringValue.uppercased()
+        badge.text = logEntry.level.description.uppercased()
         badge.font = UIFont.systemFont(ofSize: 14, weight: .bold)
         badge.textAlignment = .center
         badge.backgroundColor = logEntry.levelColor.withAlphaComponent(0.2)
@@ -473,7 +473,7 @@ final class LogDetailViewController: UIViewController {
 
     @objc private func shareButtonTapped() {
         var shareText = """
-        Level: \(logEntry.level.stringValue.uppercased())
+        Level: \(logEntry.level.description.uppercased())
         Time: \(logEntry.formattedTimestamp)
         Message: \(logEntry.message)
         """

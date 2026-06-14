@@ -135,7 +135,6 @@ actor LoggingActor {
     // MARK: - Configuration
 
     func applyConfiguration(_ configuration: EasyLogger.Configuration) {
-        SwiftLogConfiguration.minimumLogLevel = configuration.minimumLogLevel
         resetLoggers()
         initializeLogger(with: configuration)
     }
@@ -154,7 +153,6 @@ actor LoggingActor {
     }
 
     private func bootstrapLoggingSystemOnce(with configuration: EasyLogger.Configuration) {
-        SwiftLogConfiguration.minimumLogLevel = configuration.minimumLogLevel
         guard !isLoggingSystemBootstrapped else { return }
 
         let minLevel = configuration.minimumLogLevel

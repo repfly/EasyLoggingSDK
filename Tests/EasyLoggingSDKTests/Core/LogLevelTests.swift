@@ -1,4 +1,6 @@
 import XCTest
+import CocoaLumberjack
+import Logging
 @testable import EasyLoggingSDK
 
 final class LogLevelTests: XCTestCase {
@@ -6,9 +8,19 @@ final class LogLevelTests: XCTestCase {
     // MARK: - Ordering
 
     func testLogLevelOrderingBySeverity() {
+        XCTAssertTrue(LogLevel.trace < LogLevel.debug)
         XCTAssertTrue(LogLevel.debug < LogLevel.info)
         XCTAssertTrue(LogLevel.info < LogLevel.warning)
         XCTAssertTrue(LogLevel.warning < LogLevel.error)
+        XCTAssertTrue(LogLevel.error < LogLevel.critical)
+    }
+
+    func testTraceIsLessThanDebug() {
+        XCTAssertTrue(LogLevel.trace < LogLevel.debug)
+    }
+
+    func testErrorIsLessThanCritical() {
+        XCTAssertTrue(LogLevel.error < LogLevel.critical)
     }
 
     func testDebugIsLessThanError() {
@@ -26,54 +38,121 @@ final class LogLevelTests: XCTestCase {
     // MARK: - Raw Values
 
     func testRawValuesAreIntegers() {
-        XCTAssertEqual(LogLevel.debug.rawValue, 0)
-        XCTAssertEqual(LogLevel.info.rawValue, 1)
-        XCTAssertEqual(LogLevel.warning.rawValue, 2)
-        XCTAssertEqual(LogLevel.error.rawValue, 3)
+        XCTAssertEqual(LogLevel.trace.rawValue, 0)
+        XCTAssertEqual(LogLevel.debug.rawValue, 1)
+        XCTAssertEqual(LogLevel.info.rawValue, 2)
+        XCTAssertEqual(LogLevel.warning.rawValue, 3)
+        XCTAssertEqual(LogLevel.error.rawValue, 4)
+        XCTAssertEqual(LogLevel.critical.rawValue, 5)
     }
 
-    // MARK: - String Values
+    // MARK: - Description (CustomStringConvertible)
 
-    func testStringValues() {
-        XCTAssertEqual(LogLevel.debug.stringValue, "debug")
-        XCTAssertEqual(LogLevel.info.stringValue, "info")
-        XCTAssertEqual(LogLevel.warning.stringValue, "warning")
-        XCTAssertEqual(LogLevel.error.stringValue, "error")
+    func testDescriptionValues() {
+        XCTAssertEqual(LogLevel.trace.description, "trace")
+        XCTAssertEqual(LogLevel.debug.description, "debug")
+        XCTAssertEqual(LogLevel.info.description, "info")
+        XCTAssertEqual(LogLevel.warning.description, "warning")
+        XCTAssertEqual(LogLevel.error.description, "error")
+        XCTAssertEqual(LogLevel.critical.description, "critical")
     }
 
-    // MARK: - fromString
-
-    func testFromStringValid() {
-        XCTAssertEqual(LogLevel.fromString("debug"), .debug)
-        XCTAssertEqual(LogLevel.fromString("info"), .info)
-        XCTAssertEqual(LogLevel.fromString("warning"), .warning)
-        XCTAssertEqual(LogLevel.fromString("error"), .error)
+    func testDescriptionRoundTripsViaInitName() {
+        for level in [LogLevel.trace, .debug, .info, .warning, .error, .critical] {
+            XCTAssertEqual(LogLevel(name: level.description), level)
+        }
     }
 
-    func testFromStringCaseInsensitive() {
-        XCTAssertEqual(LogLevel.fromString("DEBUG"), .debug)
-        XCTAssertEqual(LogLevel.fromString("Info"), .info)
-        XCTAssertEqual(LogLevel.fromString("WARNING"), .warning)
+    // MARK: - init?(name:)
+
+    func testInitNameValid() {
+        XCTAssertEqual(LogLevel(name: "trace"), .trace)
+        XCTAssertEqual(LogLevel(name: "debug"), .debug)
+        XCTAssertEqual(LogLevel(name: "info"), .info)
+        XCTAssertEqual(LogLevel(name: "warning"), .warning)
+        XCTAssertEqual(LogLevel(name: "error"), .error)
+        XCTAssertEqual(LogLevel(name: "critical"), .critical)
     }
 
-    func testFromStringInvalid() {
-        XCTAssertNil(LogLevel.fromString("verbose"))
-        XCTAssertNil(LogLevel.fromString(""))
-        XCTAssertNil(LogLevel.fromString("critical"))
+    func testInitNameCaseInsensitive() {
+        XCTAssertEqual(LogLevel(name: "TRACE"), .trace)
+        XCTAssertEqual(LogLevel(name: "DEBUG"), .debug)
+        XCTAssertEqual(LogLevel(name: "Info"), .info)
+        XCTAssertEqual(LogLevel(name: "WARNING"), .warning)
+        XCTAssertEqual(LogLevel(name: "Critical"), .critical)
+    }
+
+    func testInitNameInvalid() {
+        XCTAssertNil(LogLevel(name: "verbose"))
+        XCTAssertNil(LogLevel(name: ""))
+        XCTAssertNil(LogLevel(name: "fatal"))
+    }
+
+    // MARK: - DDLogLevel / DDLogFlag Mapping
+
+    func testDDLogLevelMapping() {
+        XCTAssertEqual(LogLevel.trace.ddLogLevel, .verbose)
+        XCTAssertEqual(LogLevel.debug.ddLogLevel, .debug)
+        XCTAssertEqual(LogLevel.info.ddLogLevel, .info)
+        XCTAssertEqual(LogLevel.warning.ddLogLevel, .warning)
+        XCTAssertEqual(LogLevel.error.ddLogLevel, .error)
+        XCTAssertEqual(LogLevel.critical.ddLogLevel, .error)
+    }
+
+    func testDDLogFlagMapping() {
+        XCTAssertEqual(LogLevel.trace.flag, .verbose)
+        XCTAssertEqual(LogLevel.debug.flag, .debug)
+        XCTAssertEqual(LogLevel.info.flag, .info)
+        XCTAssertEqual(LogLevel.warning.flag, .warning)
+        XCTAssertEqual(LogLevel.error.flag, .error)
+        XCTAssertEqual(LogLevel.critical.flag, .error)
+    }
+
+    func testInitFromDDLogLevel() {
+        XCTAssertEqual(LogLevel(from: .verbose), .trace)
+        XCTAssertEqual(LogLevel(from: .debug), .debug)
+        XCTAssertEqual(LogLevel(from: .info), .info)
+        XCTAssertEqual(LogLevel(from: .warning), .warning)
+        XCTAssertEqual(LogLevel(from: .error), .error)
+    }
+
+    // MARK: - swift-log Mapping
+
+    func testToSwiftLogLevel() {
+        XCTAssertEqual(LogLevel.trace.toSwiftLogLevel(), .trace)
+        XCTAssertEqual(LogLevel.debug.toSwiftLogLevel(), .debug)
+        XCTAssertEqual(LogLevel.info.toSwiftLogLevel(), .info)
+        XCTAssertEqual(LogLevel.warning.toSwiftLogLevel(), .warning)
+        XCTAssertEqual(LogLevel.error.toSwiftLogLevel(), .error)
+        XCTAssertEqual(LogLevel.critical.toSwiftLogLevel(), .critical)
+    }
+
+    func testInitFromSwiftLogLevel() {
+        XCTAssertEqual(LogLevel(fromSwiftLogLevel: .trace), .trace)
+        XCTAssertEqual(LogLevel(fromSwiftLogLevel: .debug), .debug)
+        XCTAssertEqual(LogLevel(fromSwiftLogLevel: .info), .info)
+        XCTAssertEqual(LogLevel(fromSwiftLogLevel: .notice), .info)
+        XCTAssertEqual(LogLevel(fromSwiftLogLevel: .warning), .warning)
+        XCTAssertEqual(LogLevel(fromSwiftLogLevel: .error), .error)
+        XCTAssertEqual(LogLevel(fromSwiftLogLevel: .critical), .critical)
     }
 
     // MARK: - fromLogOutput
 
     func testFromLogOutputPlainString() {
+        XCTAssertEqual(LogLevel.fromLogOutput("trace"), .trace)
         XCTAssertEqual(LogLevel.fromLogOutput("debug"), .debug)
         XCTAssertEqual(LogLevel.fromLogOutput("WARNING"), .warning)
+        XCTAssertEqual(LogLevel.fromLogOutput("critical"), .critical)
     }
 
     func testFromLogOutputFormattedPrefix() {
+        XCTAssertEqual(LogLevel.fromLogOutput("🔬 TRACE"), .trace)
         XCTAssertEqual(LogLevel.fromLogOutput("🔍 DEBUG"), .debug)
         XCTAssertEqual(LogLevel.fromLogOutput("ℹ️ INFO"), .info)
         XCTAssertEqual(LogLevel.fromLogOutput("⚠️ WARNING"), .warning)
         XCTAssertEqual(LogLevel.fromLogOutput("❌ ERROR"), .error)
+        XCTAssertEqual(LogLevel.fromLogOutput("🛑 CRITICAL"), .critical)
     }
 
     func testFromLogOutputBracketContent() {
@@ -85,11 +164,9 @@ final class LogLevelTests: XCTestCase {
     func testFilteringWithMinimumLevel() {
         let minimumLevel = LogLevel.warning
 
-        // These should pass the filter (level >= minimum)
         XCTAssertTrue(LogLevel.warning.rawValue >= minimumLevel.rawValue)
         XCTAssertTrue(LogLevel.error.rawValue >= minimumLevel.rawValue)
 
-        // These should be filtered out
         XCTAssertFalse(LogLevel.debug.rawValue >= minimumLevel.rawValue)
         XCTAssertFalse(LogLevel.info.rawValue >= minimumLevel.rawValue)
     }
@@ -98,18 +175,18 @@ final class LogLevelTests: XCTestCase {
         let minimumLevel = LogLevel.error
 
         XCTAssertTrue(LogLevel.error.rawValue >= minimumLevel.rawValue)
+        XCTAssertTrue(LogLevel.critical.rawValue >= minimumLevel.rawValue)
         XCTAssertFalse(LogLevel.debug.rawValue >= minimumLevel.rawValue)
         XCTAssertFalse(LogLevel.info.rawValue >= minimumLevel.rawValue)
         XCTAssertFalse(LogLevel.warning.rawValue >= minimumLevel.rawValue)
     }
 
-    func testFilteringWithDebugMinimum() {
-        let minimumLevel = LogLevel.debug
+    func testFilteringWithTraceMinimum() {
+        let minimumLevel = LogLevel.trace
 
-        // All levels should pass when minimum is debug
-        XCTAssertTrue(LogLevel.debug.rawValue >= minimumLevel.rawValue)
-        XCTAssertTrue(LogLevel.info.rawValue >= minimumLevel.rawValue)
-        XCTAssertTrue(LogLevel.warning.rawValue >= minimumLevel.rawValue)
-        XCTAssertTrue(LogLevel.error.rawValue >= minimumLevel.rawValue)
+        // All levels should pass when minimum is trace
+        for level in [LogLevel.trace, .debug, .info, .warning, .error, .critical] {
+            XCTAssertTrue(level.rawValue >= minimumLevel.rawValue)
+        }
     }
 }
