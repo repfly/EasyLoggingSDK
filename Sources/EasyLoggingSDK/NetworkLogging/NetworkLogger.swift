@@ -96,13 +96,21 @@ public actor NetworkLogger {
 ///
 /// Registered automatically when you use ``EasyLogger/networkLoggingSessionConfiguration()``.
 /// You can also register it manually on any `URLSessionConfiguration`.
+///
+/// This is intentionally **not** `Sendable`: a `URLProtocol` subclass is created and driven by
+/// `URLSession` on its own serialized context. Its mutable stored state (`dataTask`,
+/// `receivedData`, `internalSession`) is only ever touched from `URLProtocol`'s own
+/// start/stop callbacks and the internal session's delegate callbacks, which `URLSession`
+/// serializes. To avoid inheriting a `Sendable` requirement from `URLSessionDataDelegate`
+/// (whose ancestor `URLSessionDelegate` is `Sendable`), the delegate work is delegated to a
+/// separate ``SessionDelegate`` object rather than conforming `self`.
 public final class NetworkLoggerURLProtocol: URLProtocol {
 
     private var dataTask: URLSessionDataTask?
-    private var receivedData = Data()
+    private let sessionDelegate = SessionDelegate()
     private lazy var internalSession: URLSession = {
         let config = URLSessionConfiguration.default
-        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+        return URLSession(configuration: config, delegate: sessionDelegate, delegateQueue: nil)
     }()
 
     // MARK: - URLProtocol overrides
@@ -124,8 +132,12 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
         }
         URLProtocol.setProperty(true, forKey: Constants.handledKey, in: mutableRequest)
 
-        Task { await NetworkLogger.shared.requestStarted(request) }
+        // Capture the Sendable request locally so the Task closure does not capture `self`.
+        let startedRequest = request
+        Task { await NetworkLogger.shared.requestStarted(startedRequest) }
 
+        // Wire the delegate back to this protocol instance so it can forward to `client`.
+        sessionDelegate.owner = self
         dataTask = internalSession.dataTask(with: mutableRequest as URLRequest)
         dataTask?.resume()
     }
@@ -134,34 +146,23 @@ public final class NetworkLoggerURLProtocol: URLProtocol {
         dataTask?.cancel()
     }
 
-    private enum Constants {
-        static let handledKey = "dev.alpr.EasyLoggingSDK.NetworkLoggerHandled"
-    }
-}
+    // MARK: - Client forwarding (called by SessionDelegate on the session's context)
 
-// MARK: - URLSessionDataDelegate
-
-extension NetworkLoggerURLProtocol: URLSessionDataDelegate {
-    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+    fileprivate func didReceiveResponse(_ response: URLResponse) {
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        completionHandler(.allow)
     }
 
-    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        receivedData.append(data)
+    fileprivate func didReceiveData(_ data: Data) {
         client?.urlProtocol(self, didLoad: data)
     }
 
-    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        let capturedRequest = request
-        let capturedData = receivedData
-        let capturedResponse = task.response
-
+    fileprivate func didComplete(request: URLRequest, response: URLResponse?, data: Data, error: Error?) {
+        // Only Sendable values cross the actor boundary into the logging actor.
         Task {
             await NetworkLogger.shared.requestCompleted(
-                capturedRequest,
-                response: capturedResponse,
-                data: capturedData,
+                request,
+                response: response,
+                data: data,
                 error: error
             )
         }
@@ -171,5 +172,48 @@ extension NetworkLoggerURLProtocol: URLSessionDataDelegate {
         } else {
             client?.urlProtocolDidFinishLoading(self)
         }
+    }
+
+    private enum Constants {
+        static let handledKey = "dev.alpr.EasyLoggingSDK.NetworkLoggerHandled"
+    }
+}
+
+// MARK: - URLSessionDataDelegate
+
+/// Receives the internal `URLSession`'s delegate callbacks and forwards them to the owning
+/// ``NetworkLoggerURLProtocol``.
+///
+/// This is its own `NSObject` subclass (not the `URLProtocol`) so that conforming to the
+/// `Sendable`-refined `URLSessionDataDelegate` protocol does not impose a `Sendable` requirement
+/// on the non-`Sendable` `URLProtocol` subclass. All callbacks arrive on the session's
+/// serialized delegate context; `receivedData` and `owner` are only mutated there.
+private final class SessionDelegate: NSObject, URLSessionDataDelegate {
+    // `URLSessionDataDelegate` refines the `Sendable` `URLSessionDelegate`, so this class is
+    // required to conform to `Sendable`. Its mutable state is hand-synchronized: `owner` is set
+    // once on the session's context before the task starts, and both `owner` and `receivedData`
+    // are read/mutated only from the session's serialized delegate callbacks — never concurrently.
+    // `nonisolated(unsafe)` documents that manual synchronization to the compiler.
+    nonisolated(unsafe) weak var owner: NetworkLoggerURLProtocol?
+    nonisolated(unsafe) private var receivedData = Data()
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        owner?.didReceiveResponse(response)
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        receivedData.append(data)
+        owner?.didReceiveData(data)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let owner = owner else { return }
+        owner.didComplete(
+            request: owner.request,
+            response: task.response,
+            data: receivedData,
+            error: error
+        )
     }
 }

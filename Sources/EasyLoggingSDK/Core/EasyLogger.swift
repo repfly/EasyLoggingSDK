@@ -1,6 +1,17 @@
 import Foundation
 import Logging
 
+/// `@unchecked Sendable` is the textbook-correct annotation here for an iOS 15 / macOS 12 target
+/// (no `Mutex`/`OSAllocatedUnfairLock` available): the type's mutable state is hand-synchronized.
+///
+/// - `_configuration` and `_currentEnvironment` are guarded exclusively by `_lock` (an
+///   `os_unfair_lock` wrapper); every read/write goes through the `_lock.withLock { ... }`
+///   accessors below.
+/// - `_logViewer`, `lifecycleManager`, and `shakeToShareHandler` are only ever touched on the
+///   main actor (`logViewer` is `@MainActor`; the UIKit handlers are created and used inside
+///   `@MainActor` tasks).
+/// - All log delivery is funneled through the `Sendable` `SerialLogPipeline`, which is itself
+///   immutable (`let`) after init.
 public final class EasyLogger: @unchecked Sendable {
     // MARK: - Singleton
 

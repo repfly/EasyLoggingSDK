@@ -4,7 +4,11 @@ import CocoaLumberjack
 /// Shared minimum log level for all bootstrapped swift-log handlers.
 enum SwiftLogConfiguration {
     private static let lock = UnfairLock()
-    private static var _minimumLogLevel: LogLevel = .debug
+    // Access to `_minimumLogLevel` is serialized exclusively through `lock` via the
+    // `minimumLogLevel` computed accessor below, so the stored state is manually synchronized.
+    // `nonisolated(unsafe)` is the sanctioned way to tell the compiler we are hand-synchronizing
+    // this global; never touch `_minimumLogLevel` outside the lock.
+    nonisolated(unsafe) private static var _minimumLogLevel: LogLevel = .debug
 
     static var minimumLogLevel: LogLevel {
         get { lock.withLock { _minimumLogLevel } }

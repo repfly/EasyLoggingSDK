@@ -14,7 +14,7 @@ public extension EasyLogger {
     }
 
     /// Rotates the current log file, creating a new one.
-    func rotateLogFile(completion: (() -> Void)? = nil) {
+    func rotateLogFile(completion: (@Sendable () -> Void)? = nil) {
         Task {
             await loggingActor.rotateLogFile()
             completion?()
