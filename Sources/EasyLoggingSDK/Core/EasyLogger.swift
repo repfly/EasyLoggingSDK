@@ -254,59 +254,34 @@ public final class EasyLogger: @unchecked Sendable {
 
     /// Logs a message with the specified level and optional metadata.
     ///
-    /// Configuration is read outside the logging actor to avoid deadlock if configuration
-    /// changes trigger logging while a log is in flight.
-    public func log(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: [String: Any]? = nil, file: String = #file, function: String = #function, line: Int = #line) {
+    /// Redaction is applied here — before any value crosses the actor boundary — so every
+    /// public logging path is guaranteed to redact. Configuration and environment are read
+    /// outside the logging actor to avoid deadlock if configuration changes trigger logging
+    /// while a log is in flight.
+    ///
+    /// - Important: Redaction protects *metadata* values, not the `message` string. The message
+    ///   is logged verbatim, so do not interpolate secrets into it — pass sensitive values as
+    ///   metadata (sensitive-looking keys are redacted automatically; use
+    ///   ``LogMetadata/setRedactable(_:forKey:redaction:)`` for explicit control).
+    public func log(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: LogMetadata? = nil, file: String = #file, function: String = #function, line: Int = #line) {
         let config = self.configuration
         guard level >= config.minimumLogLevel else { return }
 
         let messageString = message()
+        let isProduction = self.environment == .production
+        let redacted: [String: String]? = metadata?.redactedDictionary(isProduction: isProduction)
         Task {
             await self.loggingActor.log(
                 messageString: messageString,
                 level: level,
                 category: category,
-                metadata: metadata,
+                metadata: redacted,
                 file: file,
                 function: function,
                 line: line,
                 config: config
             )
         }
-    }
-
-    public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: T, file: String = #file, function: String = #function, line: Int = #line) {
-        let encodedMetadata = encodeCodableToMetadata(metadata)
-        log(message(), level: level, category: category, metadata: encodedMetadata, file: file, function: function, line: line)
-    }
-
-    public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, category: String? = nil, metadata: [String: Any]?, codableMetadata: T, file: String = #file, function: String = #function, line: Int = #line) {
-        var combinedMetadata = metadata ?? [:]
-        let encodedCodable = encodeCodableToMetadata(codableMetadata)
-
-        for (key, value) in encodedCodable {
-            combinedMetadata[key] = value
-        }
-
-        log(message(), level: level, category: category, metadata: combinedMetadata, file: file, function: function, line: line)
-    }
-
-    func encodeCodableToMetadata<T: Codable>(_ codable: T) -> [String: Any] {
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let data = try encoder.encode(codable)
-
-            if let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                return jsonObject
-            } else if let jsonString = String(data: data, encoding: .utf8) {
-                return ["codable_data": jsonString]
-            }
-        } catch {
-            return ["codable_error": "Failed to encode: \(error.localizedDescription)", "codable_description": String(describing: codable)]
-        }
-
-        return ["codable_fallback": String(describing: codable)]
     }
 
     func applicationWillTerminate() {

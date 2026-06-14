@@ -23,7 +23,7 @@ actor LoggingActor {
         messageString: String,
         level: LogLevel,
         category: String?,
-        metadata: [String: Any]?,
+        metadata: [String: String]?,
         file: String,
         function: String,
         line: Int,
@@ -32,7 +32,7 @@ actor LoggingActor {
         let formattedMessage = config.logFormat.format(
             message: messageString,
             level: level,
-            metadata: metadata?.mapValues { String(describing: $0) },
+            metadata: metadata,
             category: category,
             file: file,
             function: function,
@@ -45,7 +45,7 @@ actor LoggingActor {
                 message: messageString,
                 level: level,
                 category: category,
-                metadata: metadata?.mapValues { String(describing: $0) }
+                metadata: metadata
             )
         }
         #endif
@@ -69,13 +69,13 @@ actor LoggingActor {
     func logInternal(
         message: String,
         level: LogLevel,
-        metadata: [String: Any]?,
+        metadata: [String: String]?,
         config: EasyLogger.Configuration
     ) {
         let formattedMessage = LogFormat.clean.format(
             message: message,
             level: level,
-            metadata: metadata?.mapValues { String(describing: $0) },
+            metadata: metadata,
             category: nil,
             file: "",
             function: "",
@@ -87,7 +87,7 @@ actor LoggingActor {
             logViewer?.addLogEntry(
                 message: message,
                 level: level,
-                metadata: metadata?.mapValues { String(describing: $0) }
+                metadata: metadata
             )
         }
         #endif

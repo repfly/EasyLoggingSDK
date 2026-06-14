@@ -17,7 +17,7 @@ public extension EasyLogger {
         _ message: @autoclosure () -> String,
         level: LogLevel = .info,
         category: String? = nil,
-        metadata: [String: Any]? = nil,
+        metadata: LogMetadata? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -26,11 +26,12 @@ public extension EasyLogger {
         guard level >= config.minimumLogLevel else { return }
 
         let evaluatedMessage = message()
+        let redacted: [String: String]? = metadata?.redactedDictionary(isProduction: self.environment == .production)
         await loggingActor.log(
             messageString: evaluatedMessage,
             level: level,
             category: category,
-            metadata: metadata,
+            metadata: redacted,
             file: file,
             function: function,
             line: line,
@@ -42,7 +43,7 @@ public extension EasyLogger {
     func debugAsync(
         _ message: @autoclosure () -> String,
         category: String? = nil,
-        metadata: [String: Any]? = nil,
+        metadata: LogMetadata? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -62,7 +63,7 @@ public extension EasyLogger {
     func infoAsync(
         _ message: @autoclosure () -> String,
         category: String? = nil,
-        metadata: [String: Any]? = nil,
+        metadata: LogMetadata? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -82,7 +83,7 @@ public extension EasyLogger {
     func warningAsync(
         _ message: @autoclosure () -> String,
         category: String? = nil,
-        metadata: [String: Any]? = nil,
+        metadata: LogMetadata? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line
@@ -102,7 +103,7 @@ public extension EasyLogger {
     func errorAsync(
         _ message: @autoclosure () -> String,
         category: String? = nil,
-        metadata: [String: Any]? = nil,
+        metadata: LogMetadata? = nil,
         file: String = #file,
         function: String = #function,
         line: Int = #line

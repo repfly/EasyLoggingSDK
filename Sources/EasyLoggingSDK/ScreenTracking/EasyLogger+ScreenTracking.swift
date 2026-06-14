@@ -42,7 +42,7 @@ extension EasyLogger {
             config.useAutomaticUIKitScreenTimeTracking ? "automatic" : "manual"
         )
 
-        let metadata: [String: Any] = [
+        let metadata: [String: String] = [
             LoggingConstants.MetadataKey.screen: screenName,
             LoggingConstants.MetadataKey.duration: String(format: "%.3f", duration),
             LoggingConstants.MetadataKey.trackingMethod: method

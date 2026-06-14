@@ -80,26 +80,39 @@ Categories appear in the log output via the `%category` format placeholder and a
 
 ### Metadata
 
-Attach structured context to any log message.
+Attach structured context to any log message. `LogMetadata` is the single, `Sendable` metadata
+type — it is the one currency every logging API accepts.
 
 ```swift
-// Dictionary metadata
+// Dictionary literal
 logger.info("Order placed", metadata: ["orderId": "abc123", "total": 49.99])
 
-// Codable metadata
+// From a Codable value (top-level keys are flattened)
 struct Order: Codable { let id: String; let total: Double }
-logger.info("Order placed", metadata: Order(id: "abc123", total: 49.99))
+logger.info("Order placed", metadata: LogMetadata(codable: Order(id: "abc123", total: 49.99)))
 
-// Type-safe LogMetadata
+// Built incrementally
 var meta = LogMetadata()
 meta["userId"] = "u_42"
 meta["latency"] = 0.245
 logger.info("Request completed", metadata: meta)
 ```
 
+> Redaction protects metadata values, not the message string. Pass sensitive values as metadata
+> rather than interpolating them into the message.
+
 ### Privacy Redaction
 
-Mark sensitive values so they are automatically replaced with `<REDACTED>` in production.
+Sensitive values are replaced with `<REDACTED>`. Keys that look sensitive (e.g. `password`,
+`token`, `authorization`, `apiKey`, `secret`) are redacted **automatically on every path** — including
+dictionary literals and `LogMetadata(codable:)` — so the most natural call never leaks:
+
+```swift
+logger.error("Login failed", metadata: ["password": pw, "userId": id])
+// → password is <REDACTED>, userId is shown
+```
+
+Use `setRedactable` for explicit control (it overrides the automatic default):
 
 ```swift
 var meta = LogMetadata()

@@ -12,8 +12,12 @@ enum SwiftLogConfiguration {
     }
 }
 
-/// A logging backend that writes to CocoaLumberjack
-public struct LumberjackLogHandler: Logging.LogHandler {
+/// A logging backend that writes to CocoaLumberjack.
+///
+/// Internal: this is the swift-log backend the SDK bootstraps. It must not be instantiated or
+/// installed by consumers, since it writes directly to the SDK's console/file sinks. Routing the
+/// swift-log path through the redaction pipeline is tracked for the swift-log bridge work.
+struct LumberjackLogHandler: Logging.LogHandler {
     private let label: String
     private var _metadata: Logging.Logger.Metadata
 

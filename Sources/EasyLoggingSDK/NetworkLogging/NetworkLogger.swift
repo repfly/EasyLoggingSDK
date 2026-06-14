@@ -32,18 +32,41 @@ public actor NetworkLogger {
 
         let method = request.httpMethod ?? "GET"
         let url = request.url?.absoluteString ?? "unknown"
+        // Query/fragment can carry tokens — strip them for the (never-redacted) message string.
+        // The full URL is kept only in the redactable `url` metadata below.
+        let safeURL: String = {
+            guard let requestURL = request.url,
+                  var components = URLComponents(url: requestURL, resolvingAgainstBaseURL: false) else {
+                return request.url?.path ?? "unknown"
+            }
+            components.query = nil
+            components.fragment = nil
+            return components.string ?? requestURL.path
+        }()
         let statusCode = httpResponse?.statusCode ?? 0
         let requestSize = request.httpBody?.count ?? 0
         let responseSize = data?.count ?? 0
 
-        var metadata: [String: Any] = [
+        var metadata: LogMetadata = [
             "method": method,
-            "url": url,
             "status_code": statusCode,
             "duration_ms": String(format: "%.1f", duration * 1000),
             "request_size": ByteCountFormatter.string(fromByteCount: Int64(requestSize), countStyle: .memory),
             "response_size": ByteCountFormatter.string(fromByteCount: Int64(responseSize), countStyle: .memory)
         ]
+
+        // The full URL may carry query tokens; redact in production.
+        metadata.setRedactable(url, forKey: "url", redaction: .auto)
+
+        // Capture sensitive auth headers as redactable when present.
+        for headerKey in ["Authorization", "Cookie", "Set-Cookie"] {
+            if let value = request.value(forHTTPHeaderField: headerKey) {
+                metadata.setRedactable(value, forKey: headerKey.lowercased(), redaction: .auto)
+            }
+        }
+        if let setCookie = httpResponse?.value(forHTTPHeaderField: "Set-Cookie") {
+            metadata.setRedactable(setCookie, forKey: "set-cookie", redaction: .auto)
+        }
 
         if let error = error {
             metadata["error"] = error.localizedDescription
@@ -54,13 +77,13 @@ public actor NetworkLogger {
 
         if let error = error {
             level = .error
-            message = "\(method) \(url) failed — \(error.localizedDescription)"
+            message = "\(method) \(safeURL) failed — \(error.localizedDescription)"
         } else if statusCode >= 400 {
             level = .warning
-            message = "\(method) \(url) → \(statusCode) (\(String(format: "%.0fms", duration * 1000)))"
+            message = "\(method) \(safeURL) → \(statusCode) (\(String(format: "%.0fms", duration * 1000)))"
         } else {
             level = .debug
-            message = "\(method) \(url) → \(statusCode) (\(String(format: "%.0fms", duration * 1000)))"
+            message = "\(method) \(safeURL) → \(statusCode) (\(String(format: "%.0fms", duration * 1000)))"
         }
 
         EasyLogger.shared.log(message, level: level, category: "network", metadata: metadata)

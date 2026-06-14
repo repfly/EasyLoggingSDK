@@ -26,12 +26,12 @@ final class EasyLoggerCodableTests: XCTestCase {
         let user = UserInfo(name: "Test", age: 25)
 
         // Should not crash
-        logger.info("User logged in", metadata: user)
+        logger.info("User logged in", metadata: LogMetadata(codable: user))
     }
 
     func testDictionaryMetadata() {
         let logger = EasyLogger.shared
-        let metadata: [String: Any] = ["key": "value", "count": 42]
+        let metadata: LogMetadata = ["key": "value", "count": 42]
 
         // Should not crash
         logger.info("Event occurred", metadata: metadata)
@@ -47,17 +47,18 @@ final class EasyLoggerCodableTests: XCTestCase {
     func testConvenienceMethodsWithMetadata() {
         let logger = EasyLogger.shared
         let user = UserInfo(name: "Test", age: 30)
+        let metadata = LogMetadata(codable: user)
 
         // All convenience methods should work without crashing
-        logger.debug("Debug", metadata: user)
-        logger.info("Info", metadata: user)
-        logger.warning("Warning", metadata: user)
-        logger.error("Error", metadata: user)
+        logger.debug("Debug", metadata: metadata)
+        logger.info("Info", metadata: metadata)
+        logger.warning("Warning", metadata: metadata)
+        logger.error("Error", metadata: metadata)
     }
 
     func testConvenienceMethodsWithDictionary() {
         let logger = EasyLogger.shared
-        let meta: [String: Any] = ["source": "test"]
+        let meta: LogMetadata = ["source": "test"]
 
         logger.debug("Debug", metadata: meta)
         logger.info("Info", metadata: meta)
