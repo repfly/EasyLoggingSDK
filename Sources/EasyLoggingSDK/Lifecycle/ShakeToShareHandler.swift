@@ -2,7 +2,8 @@
 import UIKit
 
 /// Handles the 'shake-to-share' functionality.
-class ShakeToShareHandler {
+@MainActor
+final class ShakeToShareHandler {
     private let logger: EasyLogger
     private var shakeGestureWindow: UIWindow?
 
@@ -49,11 +50,18 @@ class ShakeToShareHandler {
             preferredStyle: .alert
         )
 
-        alert.addAction(UIAlertAction(title: "Share", style: .default) { [weak self] _ in
+        let shareTitle = NSLocalizedString(
+            "easylogging.share.action.share", value: "Share", comment: "Shake-to-share confirm button"
+        )
+        let cancelTitle = NSLocalizedString(
+            "easylogging.share.action.cancel", value: "Cancel", comment: "Shake-to-share cancel button"
+        )
+
+        alert.addAction(UIAlertAction(title: shareTitle, style: .default) { [weak self] _ in
             self?.logger.shareLogFiles(from: topViewController)
         })
 
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: cancelTitle, style: .cancel))
 
         topViewController.present(alert, animated: true)
     }

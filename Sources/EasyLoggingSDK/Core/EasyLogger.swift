@@ -1,107 +1,157 @@
-import CocoaLumberjack
 import Foundation
 import Logging
+#if canImport(UIKit)
+import UIKit
+#endif
 
+/// `@unchecked Sendable` is the textbook-correct annotation here for an iOS 15 / macOS 12 target
+/// (no `Mutex`/`OSAllocatedUnfairLock` available): the type's mutable state is hand-synchronized.
+///
+/// - `configurationStorage` and `currentEnvironmentStorage` are guarded exclusively by `stateLock` (an
+///   `os_unfair_lock` wrapper); every read/write goes through the `stateLock.withLock { ... }`
+///   accessors below.
+/// - `logViewerStorage`, `lifecycleManager`, and `shakeToShareHandler` are only ever touched on the
+///   main actor (`logViewer` is `@MainActor`; the UIKit handlers are created and used inside
+///   `@MainActor` tasks).
+/// - All log delivery is funneled through the `Sendable` `SerialLogPipeline`, which is itself
+///   immutable (`let`) after init.
 public final class EasyLogger: @unchecked Sendable {
     // MARK: - Singleton
-    
+
     public static let shared = EasyLogger()
 
     // MARK: - Properties
-    
-    let queue = DispatchQueue(label: "com.easylogger.sdk.queue")
-    
-    let crashFlagKey = LoggingConstants.UserDefaultsKey.crashFlag
+
+    let loggingActor = LoggingActor()
+
+    /// Serializes all logging work (records, configuration applies, flush markers) in FIFO order.
+    let pipeline: SerialLogPipeline
+
     let environmentKey = LoggingConstants.UserDefaultsKey.environment
-    var _configuration: Configuration
-    let _lock = UnfairLock()
-    var fileLogger: DDFileLogger?
-    var _currentEnvironment: LogEnvironment
+    var configurationStorage: Configuration
+    let stateLock = UnfairLock()
+    var currentEnvironmentStorage: LogEnvironment
     let screenTimeTracker = ScreenTimeTracker()
 
     #if canImport(UIKit)
-    lazy var memoryLeakDetector = MemoryLeakDetector(logger: self)
-    var _logViewer: InAppLogViewer!
+    var logViewerStorage: InAppLogViewer!
 
-    // Internal access to fileLogger for InAppLogViewer
-    var internalFileLogger: DDFileLogger? {
-        return self.fileLogger
-    }
-
-    // UIKit-related handlers
-    var lifecycleManager: Any?
-    var shakeToShareHandler: Any?
+    // UIKit-only handlers. These are `@MainActor` classes (implicitly `Sendable`) and are only ever
+    // created and touched inside `@MainActor` tasks, so storing them on this `@unchecked Sendable`
+    // singleton is safe.
+    var lifecycleManager: LifecycleManager?
+    var shakeToShareHandler: ShakeToShareHandler?
     #endif
 
-    static var isLoggingSystemBootstrapped = false
-    static let bootstrapLock = NSLock()
-    
     #if canImport(UIKit)
+    @MainActor
     var logViewer: InAppLogViewer {
-        return _logViewer
+        return logViewerStorage
     }
     #endif
 
-    /// Returns whether shake-to-share is currently enabled
+    /// Returns whether shake-to-share is currently enabled.
     var isShakeToShareEnabled: Bool {
-        _lock.withLock { self._configuration.enableShakeToShare }
+        stateLock.withLock { self.configurationStorage.enableShakeToShare }
     }
 
-    // Thread-safe configuration access using unfair lock
+    /// The current configuration. Get-only; apply changes via ``configure(_:)`` or
+    /// ``setEnvironment(_:configuration:)``. Reads are lock-guarded.
     public var configuration: Configuration {
-        get { _lock.withLock { self._configuration } }
-        set { _lock.withLock { self._configuration = newValue } }
+        stateLock.withLock { self.configurationStorage }
     }
 
+    /// The active environment. Get-only; change it via ``setEnvironment(_:configuration:)`` so
+    /// persistence, configuration apply, and UIKit reconfiguration always happen together.
     public var environment: LogEnvironment {
-        get { _lock.withLock { self._currentEnvironment } }
-        set { _lock.withLock { self._currentEnvironment = newValue } }
+        stateLock.withLock { self.currentEnvironmentStorage }
     }
-    
+
     // MARK: - Initialization
 
     private init() {
         let savedEnvironment = UserDefaults.standard.string(forKey: environmentKey)
-        self._currentEnvironment = LogEnvironment(rawValue: savedEnvironment ?? "") ?? .development
-        self._configuration = self._currentEnvironment.defaultConfiguration
+        let environment = LogEnvironment(rawValue: savedEnvironment ?? "") ?? .development
+        let initialConfiguration = environment.defaultConfiguration
+        self.currentEnvironmentStorage = environment
+        self.configurationStorage = initialConfiguration
 
-        #if canImport(UIKit)
-        self._logViewer = InAppLogViewer(logger: self)
-        #endif
-
-        initializeLogger(with: self._configuration)
-        setupUIKitIntegrationsIfAvailable()
-    }
-    
-    deinit {}
-    
-    private func setupUIKitIntegrationsIfAvailable() {
-        #if canImport(UIKit)
-        self.lifecycleManager = LifecycleManager(logger: self)
-        self.shakeToShareHandler = ShakeToShareHandler(logger: self)
-        #endif
-    }
-    
-    // MARK: - Configuration
-    
-    public func setupEnvironment(_ environment: LogEnvironment, customConfiguration: Configuration? = nil) {
-        queue.async {
-            self._currentEnvironment = environment
-            UserDefaults.standard.set(environment.rawValue, forKey: self.environmentKey)
-            
-            if let customConfig = customConfiguration {
-                self.performConfiguration(customConfig)
-            } else {
-                self.performConfiguration(environment.defaultConfiguration)
+        // The pipeline routes every event to the actor in strict FIFO order. It is created
+        // first so that any early logs/config applies are ordered behind the initial setup.
+        let actor = loggingActor
+        self.pipeline = SerialLogPipeline { event in
+            switch event {
+            case let .record(record):
+                await actor.process(record)
+            case let .applyConfiguration(configuration):
+                await actor.applyConfiguration(configuration)
+            case let .actorOperation(operation):
+                await operation(actor)
+            case .flush:
+                // Resumed by the pipeline's consumer loop itself; never forwarded here.
+                break
             }
         }
+
+        #if canImport(UIKit)
+        self.logViewerStorage = InAppLogViewer(logger: self)
+        // Wire the in-app viewer onto the actor as the *first* pipeline event so it is observed
+        // before any log record is processed; otherwise early records enqueued before a separate
+        // setup `Task` lands would be dropped from the in-memory viewer buffer (Phase 7 race fix).
+        if let viewer = logViewerStorage {
+            pipeline.enqueue(.actorOperation { actor in
+                await actor.setLogViewer(viewer)
+            })
+        }
+        #endif
+
+        // Initial configuration is enqueued through the pipeline so it is ordered ahead of any
+        // early logs.
+        pipeline.enqueue(.applyConfiguration(initialConfiguration))
+
+        setupUIKitIntegrationsIfAvailable()
     }
-    
+
+    deinit {}
+
+    private func setupUIKitIntegrationsIfAvailable() {
+        #if canImport(UIKit)
+        Task { @MainActor in
+            self.lifecycleManager = LifecycleManager(logger: self)
+            self.shakeToShareHandler = ShakeToShareHandler(logger: self)
+        }
+        #endif
+    }
+
+    // MARK: - Configuration
+
+    public func setEnvironment(_ environment: LogEnvironment, configuration: Configuration? = nil) {
+        stateLock.withLock { self.currentEnvironmentStorage = environment }
+        UserDefaults.standard.set(environment.rawValue, forKey: self.environmentKey)
+        applyConfigurationChange(configuration ?? environment.defaultConfiguration)
+    }
+
+    /// The single chokepoint for applying a configuration: swaps the lock-guarded configuration,
+    /// orders the apply through the pipeline (preserving FIFO with logs), and reconfigures the
+    /// UIKit integrations. Both the sync and async `configure`/`setEnvironment` entry points route
+    /// through here so their side effects can never drift apart.
+    func applyConfigurationChange(_ new: Configuration) {
+        let previous = stateLock.withLock { () -> Configuration in
+            let old = self.configurationStorage
+            self.configurationStorage = new
+            return old
+        }
+        pipeline.enqueue(.applyConfiguration(new))
+        #if canImport(UIKit)
+        applyUIKitConfiguration(previous: previous, new: new)
+        #endif
+    }
+
     /// Configuration for the logging SDK.
     ///
     /// Use environment presets for quick setup:
     /// ```swift
-    /// EasyLogger.shared.setupEnvironment(.production)
+    /// EasyLogger.shared.setEnvironment(.production)
     /// ```
     /// Or customize individual properties:
     /// ```swift
@@ -117,11 +167,9 @@ public final class EasyLogger: @unchecked Sendable {
         /// Write logs to the system console via CocoaLumberjack's OS logger.
         public var shouldLogToConsole: Bool = true
 
-        /// Write logs to rotating files on disk. Required for log sharing and the in-app viewer's file history.
+        /// Write logs to rotating files on disk. Required for log sharing (the in-app viewer shows
+        /// the in-memory, since-launch buffer regardless of this flag).
         public var shouldLogToFile: Bool = true
-
-        /// Install an uncaught exception handler to log crashes and detect previous-session crashes on next launch.
-        public var shouldDetectCrashes: Bool = true
 
         /// Enable shake-to-share: shaking the device presents a share sheet with log files. UIKit only.
         public var enableShakeToShare: Bool = false
@@ -154,17 +202,8 @@ public final class EasyLogger: @unchecked Sendable {
         /// Requires ``trackScreenLoadingTimes`` to be `true`.
         public var useAutomaticUIKitScreenTimeTracking: Bool = false
 
-        /// Periodically check monitored objects for potential memory leaks. UIKit only.
-        public var enableMemoryLeakDetection: Bool = false
-
-        /// Interval (seconds) between memory leak checks. Default: 5.0s.
-        public var memoryLeakCheckInterval: TimeInterval = LoggingConstants.TimeInterval.defaultLeakCheckInterval
-
         /// Enable the in-app log viewer overlay accessible via gesture. Requires ``shouldLogToFile`` for file history.
         public var enableInAppLogViewer: Bool = false
-
-        /// Optional access code required to open the in-app log viewer. Useful for QA builds.
-        public var logViewerAccessCode: String?
 
         /// Gesture that activates the in-app log viewer.
         public var logViewerActivationGesture: ActivationGesture = .shake
@@ -172,134 +211,112 @@ public final class EasyLogger: @unchecked Sendable {
         /// Maximum number of in-memory log entries retained by the log viewer. Default: 1000.
         public var maxLogViewerEntries: Int = 1000
 
+        /// Enable automatic network request logging via ``NetworkLoggerURLProtocol``.
+        /// When `true`, ``networkLoggingSessionConfiguration(base:)`` is available to create
+        /// a pre-configured `URLSessionConfiguration`.
+        public var enableNetworkLogging: Bool = false
+
         public init() {}
     }
 
+    /// Applies a new configuration and reinitializes loggers and optional UIKit integrations.
     public func configure(_ configuration: Configuration) {
-        queue.async {
-            self.performConfiguration(configuration)
-        }
+        applyConfigurationChange(configuration)
     }
 
-    private func performConfiguration(_ configuration: Configuration) {
-        let previousConfig = _lock.withLock { self._configuration }
-        _lock.withLock { self._configuration = configuration }
-
-        resetLoggers()
-        initializeLogger(with: configuration)
-
-        #if canImport(UIKit)
-        let wasTrackingEnabled = previousConfig.trackScreenLoadingTimes && previousConfig.useAutomaticUIKitScreenTimeTracking
-        let willBeTrackingEnabled = configuration.trackScreenLoadingTimes && configuration.useAutomaticUIKitScreenTimeTracking
+    #if canImport(UIKit)
+    private func applyUIKitConfiguration(previous: Configuration, new: Configuration) {
+        let wasTrackingEnabled = previous.trackScreenLoadingTimes && previous.useAutomaticUIKitScreenTimeTracking
+        let willBeTrackingEnabled = new.trackScreenLoadingTimes && new.useAutomaticUIKitScreenTimeTracking
         if !wasTrackingEnabled, willBeTrackingEnabled {
-            UIViewController.setupScreenTimeTracking()
+            Task { @MainActor in UIViewController.setupScreenTimeTracking() }
         } else if wasTrackingEnabled, !willBeTrackingEnabled {
-            UIViewController.tearDownScreenTimeTracking()
+            Task { @MainActor in UIViewController.tearDownScreenTimeTracking() }
         }
 
-        let wasLeakDetectionEnabled = previousConfig.enableMemoryLeakDetection
-        let willBeLeakDetectionEnabled = configuration.enableMemoryLeakDetection
-        if !wasLeakDetectionEnabled, willBeLeakDetectionEnabled {
-            memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: configuration.memoryLeakCheckInterval)
-            memoryLeakDetector.startMonitoring()
-        } else if wasLeakDetectionEnabled, !willBeLeakDetectionEnabled {
-            memoryLeakDetector.stopMonitoring()
-        } else if wasLeakDetectionEnabled, willBeLeakDetectionEnabled {
-            memoryLeakDetector.stopMonitoring()
-            memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: configuration.memoryLeakCheckInterval)
-            memoryLeakDetector.startMonitoring()
-        }
+        let logViewerConfigChanged = previous.enableInAppLogViewer != new.enableInAppLogViewer
+            || previous.logViewerActivationGesture != new.logViewerActivationGesture
+            || previous.maxLogViewerEntries != new.maxLogViewerEntries
 
-        let wasLogViewerEnabled = previousConfig.enableInAppLogViewer
-        let willBeLogViewerEnabled = configuration.enableInAppLogViewer
-        if wasLogViewerEnabled != willBeLogViewerEnabled || willBeLogViewerEnabled {
-            DispatchQueue.main.async {
+        if logViewerConfigChanged || new.enableInAppLogViewer {
+            Task { @MainActor in
                 self.logViewer.configure(
-                    isEnabled: configuration.enableInAppLogViewer,
-                    activationGesture: configuration.logViewerActivationGesture,
-                    accessCode: configuration.logViewerAccessCode,
-                    maxLogEntries: configuration.maxLogViewerEntries
+                    isEnabled: new.enableInAppLogViewer,
+                    activationGesture: new.logViewerActivationGesture,
+                    maxLogEntries: new.maxLogViewerEntries
                 )
             }
         }
-        #endif
-    }
 
-    public func log(_ message: @autoclosure () -> String, level: LogLevel = .info, metadata: [String: Any]? = nil, file: String = #file, function: String = #function, line: Int = #line) {
-        // Get config outside the queue to avoid deadlock
+        let shakeConfigChanged = previous.enableShakeToShare != new.enableShakeToShare
+            || previous.shareDialogTitle != new.shareDialogTitle
+            || previous.shareDialogMessage != new.shareDialogMessage
+
+        if shakeConfigChanged || new.enableShakeToShare {
+            Task { @MainActor in
+                self.shakeToShareHandler?.setupShakeToShare()
+            }
+        }
+    }
+    #endif
+
+    // MARK: - Logging
+
+    /// Logs a message with the specified level and optional metadata.
+    ///
+    /// Redaction is applied here — before any value crosses the actor boundary — so every
+    /// public logging path is guaranteed to redact. Configuration and environment are read
+    /// outside the logging actor to avoid deadlock if configuration changes trigger logging
+    /// while a log is in flight.
+    ///
+    /// - Important: Redaction protects *metadata* values, not the `message` string. The message
+    ///   is logged verbatim, so do not interpolate secrets into it — pass sensitive values as
+    ///   metadata (sensitive-looking keys are redacted automatically; use
+    ///   ``LogMetadata/setRedactable(_:forKey:redaction:)`` for explicit control).
+    public func log(
+        _ message: @autoclosure () -> String,
+        level: LogLevel = .info,
+        category: String? = nil,
+        metadata: LogMetadata? = nil,
+        file: String = #file,
+        function: String = #function,
+        line: Int = #line
+    ) {
         let config = self.configuration
         guard level >= config.minimumLogLevel else { return }
-        
+
         let messageString = message()
-        queue.async {
-            let formattedMessage = config.logFormat.format(message: messageString, level: level, metadata: metadata?.mapValues { String(describing: $0) }, file: file, function: function, line: line)
-            
-            #if canImport(UIKit)
-            if config.enableInAppLogViewer {
-                self.logViewer.addLogEntry(message: messageString, level: level, metadata: metadata?.mapValues { String(describing: $0) })
-            }
-            #endif
-            
-            withVaList([formattedMessage as NSString]) { args in
-                DDLog.log(asynchronous: false, level: level.ddLogLevel, flag: level.flag, context: 0, file: file, function: function, line: UInt(line), tag: nil, format: "%@", arguments: args)
-            }
-        }
+        let isProduction = self.environment == .production
+        // Redaction happens HERE, before the value crosses the pipeline/actor boundary. The
+        // `[String: String]` carried by `LogRecord` is therefore already redacted, so everything
+        // downstream — the in-app viewer's in-memory buffer (via `addLogEntry`) and the formatted
+        // on-disk files exported by `shareLogFiles` — only ever sees redacted metadata.
+        let redacted: [String: String]? = metadata?.redactedDictionary(isProduction: isProduction)
+        let record = LogRecord(
+            messageString: messageString,
+            level: level,
+            category: category,
+            metadata: redacted,
+            file: file,
+            function: function,
+            line: line,
+            config: config,
+            isInternal: false
+        )
+        pipeline.enqueue(.record(record))
     }
 
-    public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, metadata: T, file: String = #file, function: String = #function, line: Int = #line) {
-        let encodedMetadata = encodeCodableToMetadata(metadata)
-        log(message(), level: level, metadata: encodedMetadata, file: file, function: function, line: line)
+    /// Awaits until all previously enqueued log records and configuration applies have been
+    /// fully processed and delivered. Use this to guarantee logs are flushed (e.g. before exit).
+    public func flush() async {
+        await pipeline.flush()
     }
 
-    public func log<T: Codable>(_ message: @autoclosure () -> String, level: LogLevel = .info, metadata: [String: Any]?, codableMetadata: T, file: String = #file, function: String = #function, line: Int = #line) {
-        var combinedMetadata = metadata ?? [:]
-        let encodedCodable = encodeCodableToMetadata(codableMetadata)
-        
-        // Merge the two metadata dictionaries
-        for (key, value) in encodedCodable {
-            combinedMetadata[key] = value
-        }
-        
-        log(message(), level: level, metadata: combinedMetadata, file: file, function: function, line: line)
-    }
-
-    func encodeCodableToMetadata<T: Codable>(_ codable: T) -> [String: Any] {
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let data = try encoder.encode(codable)
-            
-            if let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                return jsonObject
-            } else if let jsonString = String(data: data, encoding: .utf8) {
-                // If it's not a dictionary (e.g., array or primitive), store as JSON string
-                return ["codable_data": jsonString]
-            }
-        } catch {
-            // If encoding fails, fall back to description
-            return ["codable_error": "Failed to encode: \(error.localizedDescription)", "codable_description": String(describing: codable)]
-        }
-        
-        return ["codable_fallback": String(describing: codable)]
-    }
-    
-    func applicationWillTerminate() {
-        queue.async {
-            UserDefaults.standard.set(false, forKey: self.crashFlagKey)
-        }
-    }
-    
     func applicationDidFinishLaunching() {
         #if canImport(UIKit)
-        DispatchQueue.main.async {
-            (self.shakeToShareHandler as? ShakeToShareHandler)?.setupShakeToShare()
+        Task { @MainActor in
+            self.shakeToShareHandler?.setupShakeToShare()
         }
         #endif
-    }
-
-    func performOnInternalQueue(_ block: @escaping () -> Void) {
-        queue.async {
-            block()
-        }
     }
 }

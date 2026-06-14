@@ -1,8 +1,5 @@
-//
 //  InAppLogViewerUI.swift
-//
 //  UI components for InAppLogViewer — extracted for file length compliance.
-//
 
 #if canImport(UIKit)
 import UIKit
@@ -29,7 +26,7 @@ final class LogViewerViewController: UIViewController,
     private var allLogEntries: [InAppLogViewer.LogEntry] = []
     private let tableView = UITableView()
     private var filteredEntries: [InAppLogViewer.LogEntry] = []
-    private var selectedLevels: Set<LogLevel> = [.debug, .info, .warning, .error]
+    private var selectedLevels: Set<LogLevel> = [.trace, .debug, .info, .warning, .error, .critical]
     private var searchText: String = ""
     private let searchController = UISearchController(searchResultsController: nil)
     weak var logViewer: InAppLogViewer?
@@ -42,7 +39,6 @@ final class LogViewerViewController: UIViewController,
     init(logViewer: InAppLogViewer) {
         self.logViewer = logViewer
         super.init(nibName: nil, bundle: nil)
-        loadAllLogEntries()
     }
 
     required init?(coder: NSCoder) {
@@ -52,25 +48,21 @@ final class LogViewerViewController: UIViewController,
     private func loadAllLogEntries() {
         guard let logViewer = self.logViewer else { return }
 
-        DispatchQueue.main.async {
-            let loadingIndicator = UIActivityIndicatorView(style: .medium)
-            loadingIndicator.startAnimating()
-            self.navigationItem.titleView = loadingIndicator
-        }
+        let loadingIndicator = UIActivityIndicatorView(style: .medium)
+        loadingIndicator.startAnimating()
+        self.navigationItem.titleView = loadingIndicator
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            let entries = logViewer.getAllLogEntries(
+        Task { @MainActor in
+            let entries = await logViewer.getAllLogEntries(
                 searchText: self.searchText.isEmpty ? nil : self.searchText,
                 levels: self.selectedLevels
             )
 
-            DispatchQueue.main.async {
-                self.allLogEntries = entries
-                self.filteredEntries = entries
-                self.tableView.reloadData()
-                self.navigationItem.titleView = nil
-                self.title = "QA Log Viewer (\(self.allLogEntries.count) entries)"
-            }
+            self.allLogEntries = entries
+            self.filteredEntries = entries
+            self.tableView.reloadData()
+            self.navigationItem.titleView = nil
+            self.title = "QA Log Viewer (\(self.allLogEntries.count) entries)"
         }
     }
 
@@ -122,8 +114,11 @@ final class LogViewerViewController: UIViewController,
         guard let logViewer = self.logViewer else { return }
         let searchQuery = searchText.isEmpty ? nil : searchText
         let levelFilter = selectedLevels.isEmpty ? nil : selectedLevels
-        self.filteredEntries = logViewer.getAllLogEntries(searchText: searchQuery, levels: levelFilter)
-        DispatchQueue.main.async {
+        Task { @MainActor in
+            self.filteredEntries = await logViewer.getAllLogEntries(
+                searchText: searchQuery,
+                levels: levelFilter
+            )
             self.tableView.reloadData()
             self.title = "QA Log Viewer (\(self.filteredEntries.count) entries)"
         }
@@ -132,11 +127,13 @@ final class LogViewerViewController: UIViewController,
     @objc private func closeButtonTapped() { dismiss(animated: true) }
 
     @objc private func shareButtonTapped() {
-        if let logger = self.logViewer?.currentLogger,
-           let logFileURL = logger.currentLogFileURL {
-            shareLogFile(logFileURL)
-        } else {
-            shareLogEntries()
+        Task { @MainActor in
+            if let logger = self.logViewer?.currentLogger,
+               let logFileURL = await logger.getCurrentLogFileURL() {
+                self.shareLogFile(logFileURL)
+            } else {
+                self.shareLogEntries()
+            }
         }
     }
 
@@ -173,7 +170,7 @@ final class LogViewerViewController: UIViewController,
     private func shareLogEntries() {
         var logText = "Log Entries\n\n"
         for entry in filteredEntries {
-            logText += "[\(entry.level.stringValue.uppercased())] "
+            logText += "[\(entry.level.description.uppercased())] "
             logText += "[\(entry.formattedTimestamp)] \(entry.message)\n"
             if let metadata = entry.metadata, !metadata.isEmpty {
                 logText += "Metadata: \(metadata)\n"
@@ -195,10 +192,10 @@ final class LogViewerViewController: UIViewController,
             message: "Select log levels to display",
             preferredStyle: .actionSheet
         )
-        for level in [LogLevel.debug, .info, .warning, .error] {
+        for level in [LogLevel.trace, .debug, .info, .warning, .error, .critical] {
             let isSelected = selectedLevels.contains(level)
             alert.addAction(UIAlertAction(
-                title: "\(isSelected ? "✓ " : "")Show \(level.stringValue.capitalized)",
+                title: "\(isSelected ? "✓ " : "")Show \(level.description.capitalized)",
                 style: .default
             ) { [weak self] _ in
                 guard let self else { return }
@@ -251,7 +248,6 @@ final class LogEntryCell: UITableViewCell {
     private let levelLabel = UILabel()
     private let timestampLabel = UILabel()
     private let messageLabel = UILabel()
-    private let sourceLabel = UILabel()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -270,10 +266,6 @@ final class LogEntryCell: UITableViewCell {
         levelLabel.layer.masksToBounds = true
         contentView.addSubview(levelLabel)
 
-        sourceLabel.translatesAutoresizingMaskIntoConstraints = false
-        sourceLabel.font = UIFont.systemFont(ofSize: 14)
-        contentView.addSubview(sourceLabel)
-
         timestampLabel.translatesAutoresizingMaskIntoConstraints = false
         timestampLabel.font = UIFont.systemFont(ofSize: 12)
         timestampLabel.textColor = .secondaryLabel
@@ -289,11 +281,8 @@ final class LogEntryCell: UITableViewCell {
             levelLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             levelLabel.widthAnchor.constraint(equalToConstant: 60),
             levelLabel.heightAnchor.constraint(equalToConstant: 20),
-            sourceLabel.centerYAnchor.constraint(equalTo: levelLabel.centerYAnchor),
-            sourceLabel.leadingAnchor.constraint(equalTo: levelLabel.trailingAnchor, constant: 8),
-            sourceLabel.widthAnchor.constraint(equalToConstant: 25),
             timestampLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            timestampLabel.leadingAnchor.constraint(equalTo: sourceLabel.trailingAnchor, constant: 8),
+            timestampLabel.leadingAnchor.constraint(equalTo: levelLabel.trailingAnchor, constant: 8),
             timestampLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             messageLabel.topAnchor.constraint(equalTo: levelLabel.bottomAnchor, constant: 8),
             messageLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
@@ -303,12 +292,10 @@ final class LogEntryCell: UITableViewCell {
     }
 
     func configure(with entry: InAppLogViewer.LogEntry) {
-        levelLabel.text = entry.level.stringValue.uppercased()
+        levelLabel.text = entry.level.description.uppercased()
         levelLabel.backgroundColor = entry.levelColor.withAlphaComponent(0.2)
         levelLabel.textColor = entry.levelColor
-        sourceLabel.text = entry.sourceIcon
-        timestampLabel.text = entry.source == .file
-            ? entry.fullFormattedTimestamp : entry.formattedTimestamp
+        timestampLabel.text = entry.formattedTimestamp
         messageLabel.text = entry.message
         accessoryType = .disclosureIndicator
     }
@@ -414,7 +401,7 @@ final class LogDetailViewController: UIViewController {
         container.translatesAutoresizingMaskIntoConstraints = false
         let badge = UILabel()
         badge.translatesAutoresizingMaskIntoConstraints = false
-        badge.text = logEntry.level.stringValue.uppercased()
+        badge.text = logEntry.level.description.uppercased()
         badge.font = UIFont.systemFont(ofSize: 14, weight: .bold)
         badge.textAlignment = .center
         badge.backgroundColor = logEntry.levelColor.withAlphaComponent(0.2)
@@ -472,7 +459,7 @@ final class LogDetailViewController: UIViewController {
 
     @objc private func shareButtonTapped() {
         var shareText = """
-        Level: \(logEntry.level.stringValue.uppercased())
+        Level: \(logEntry.level.description.uppercased())
         Time: \(logEntry.formattedTimestamp)
         Message: \(logEntry.message)
         """

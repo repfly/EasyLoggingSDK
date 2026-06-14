@@ -1,8 +1,3 @@
-//
-//  EasyLogger+LogViewer.swift
-//
-//
-
 #if canImport(UIKit)
 import UIKit
 
@@ -15,43 +10,44 @@ public extension EasyLogger {
             )
             return
         }
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.logViewer.showLogViewer()
         }
     }
 
     func clearInAppLogViewerEntries() {
         guard self.configuration.enableInAppLogViewer else { return }
-        self.logViewer.clearLogs()
+        Task { @MainActor in
+            self.logViewer.clearLogs()
+        }
     }
 }
 
 extension EasyLogger {
     func shareLogFiles(from viewController: UIViewController) {
-        guard let logDirectory = self.fileLogger?.logFileManager.logsDirectory else { return }
-        let fileManager = FileManager.default
-        let logDirectoryURL = URL(fileURLWithPath: logDirectory)
-        guard let logFiles = try? fileManager.contentsOfDirectory(
-            at: logDirectoryURL,
-            includingPropertiesForKeys: nil
-        ) else { return }
+        Task {
+            // Resolve the log files as Sendable URLs on the actor; the non-Sendable DDFileLogger
+            // never leaves the actor.
+            let logFiles = await self.loggingActor.logFilePaths().map { URL(fileURLWithPath: $0) }
+            guard !logFiles.isEmpty else { return }
 
-        DispatchQueue.main.async {
-            let activityVC = UIActivityViewController(
-                activityItems: logFiles,
-                applicationActivities: nil
-            )
-            if let popover = activityVC.popoverPresentationController {
-                popover.sourceView = viewController.view
-                popover.sourceRect = CGRect(
-                    x: viewController.view.bounds.midX,
-                    y: viewController.view.bounds.midY,
-                    width: 0,
-                    height: 0
+            await MainActor.run {
+                let activityVC = UIActivityViewController(
+                    activityItems: logFiles,
+                    applicationActivities: nil
                 )
-                popover.permittedArrowDirections = []
+                if let popover = activityVC.popoverPresentationController {
+                    popover.sourceView = viewController.view
+                    popover.sourceRect = CGRect(
+                        x: viewController.view.bounds.midX,
+                        y: viewController.view.bounds.midY,
+                        width: 0,
+                        height: 0
+                    )
+                    popover.permittedArrowDirections = []
+                }
+                viewController.present(activityVC, animated: true)
             }
-            viewController.present(activityVC, animated: true)
         }
     }
 }

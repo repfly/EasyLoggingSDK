@@ -11,13 +11,13 @@ final class ThreadSafetyTests: XCTestCase {
         let group = DispatchGroup()
 
         // Concurrent writers
-        for i in 0..<iterations {
+        for index in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
                 var config = EasyLogger.Configuration()
-                config.minimumLogLevel = i % 2 == 0 ? .debug : .error
-                config.maxFileSize = UInt64(i)
-                EasyLogger.shared.configuration = config
+                config.minimumLogLevel = index % 2 == 0 ? .debug : .error
+                config.maxFileSize = UInt64(index)
+                EasyLogger.shared.configure(config)
                 group.leave()
             }
         }
@@ -28,8 +28,8 @@ final class ThreadSafetyTests: XCTestCase {
             DispatchQueue.global().async {
                 let config = EasyLogger.shared.configuration
                 // Just verify we can read without crashing
-                let _ = config.minimumLogLevel
-                let _ = config.maxFileSize
+                _ = config.minimumLogLevel
+                _ = config.maxFileSize
                 group.leave()
             }
         }
@@ -48,12 +48,12 @@ final class ThreadSafetyTests: XCTestCase {
         let iterations = 1000
         let group = DispatchGroup()
 
-        let environments: [LogEnvironment] = [.development, .staging, .production, .custom]
+        let environments: [LogEnvironment] = [.development, .staging, .production]
 
-        for i in 0..<iterations {
+        for index in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
-                EasyLogger.shared.environment = environments[i % environments.count]
+                EasyLogger.shared.setEnvironment(environments[index % environments.count])
                 group.leave()
             }
         }
@@ -61,7 +61,7 @@ final class ThreadSafetyTests: XCTestCase {
         for _ in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
-                let _ = EasyLogger.shared.environment
+                _ = EasyLogger.shared.environment
                 group.leave()
             }
         }
@@ -80,12 +80,12 @@ final class ThreadSafetyTests: XCTestCase {
         let iterations = 1000
         let group = DispatchGroup()
 
-        let levels: [LogLevel] = [.debug, .info, .warning, .error]
+        let levels: [LogLevel] = [.trace, .debug, .info, .warning, .error, .critical]
 
-        for i in 0..<iterations {
+        for index in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
-                let _ = EasyLogger.shared.isEnabled(level: levels[i % levels.count])
+                _ = EasyLogger.shared.isEnabled(level: levels[index % levels.count])
                 group.leave()
             }
         }
@@ -100,8 +100,12 @@ final class ThreadSafetyTests: XCTestCase {
     // MARK: - UnfairLock
 
     func testUnfairLockWithLock() {
+        // Heap-allocated counter so the concurrent closures mutate a shared reference's property
+        // (guarded by the lock under test) rather than a captured `var` — the latter is a Swift 6
+        // data-race error. The lock is exactly what makes this safe, which is what we're verifying.
+        final class Counter: @unchecked Sendable { var value = 0 }
+        let counter = Counter()
         let lock = UnfairLock()
-        var counter = 0
         let iterations = 10_000
         let expectation = XCTestExpectation(description: "Lock contention")
         let group = DispatchGroup()
@@ -110,14 +114,14 @@ final class ThreadSafetyTests: XCTestCase {
             group.enter()
             DispatchQueue.global().async {
                 lock.withLock {
-                    counter += 1
+                    counter.value += 1
                 }
                 group.leave()
             }
         }
 
         group.notify(queue: .main) {
-            XCTAssertEqual(counter, iterations)
+            XCTAssertEqual(counter.value, iterations)
             expectation.fulfill()
         }
 

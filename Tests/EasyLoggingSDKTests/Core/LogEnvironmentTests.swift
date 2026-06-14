@@ -10,7 +10,7 @@ final class LogEnvironmentTests: XCTestCase {
         XCTAssertTrue(config.shouldLogToFile)
         XCTAssertTrue(config.enableShakeToShare)
         XCTAssertTrue(config.enableInAppLogViewer)
-        XCTAssertTrue(config.enableMemoryLeakDetection)
+        XCTAssertEqual(config.logViewerActivationGesture, .longPress)
         XCTAssertTrue(config.trackScreenLoadingTimes)
     }
 
@@ -20,7 +20,6 @@ final class LogEnvironmentTests: XCTestCase {
         XCTAssertFalse(config.shouldLogToConsole)
         XCTAssertTrue(config.shouldLogToFile)
         XCTAssertTrue(config.enableInAppLogViewer)
-        XCTAssertEqual(config.logViewerAccessCode, "qa_access")
     }
 
     func testProductionDefaults() {
@@ -28,28 +27,19 @@ final class LogEnvironmentTests: XCTestCase {
         XCTAssertEqual(config.minimumLogLevel, .warning)
         XCTAssertFalse(config.shouldLogToConsole)
         XCTAssertTrue(config.shouldLogToFile)
-        XCTAssertTrue(config.shouldDetectCrashes)
         XCTAssertFalse(config.enableInAppLogViewer)
-    }
-
-    func testCustomDefaults() {
-        let config = LogEnvironment.custom.defaultConfiguration
-        XCTAssertEqual(config.minimumLogLevel, .info)
-        XCTAssertTrue(config.shouldLogToFile)
     }
 
     func testRawValues() {
         XCTAssertEqual(LogEnvironment.development.rawValue, "development")
         XCTAssertEqual(LogEnvironment.staging.rawValue, "staging")
         XCTAssertEqual(LogEnvironment.production.rawValue, "production")
-        XCTAssertEqual(LogEnvironment.custom.rawValue, "custom")
     }
 
     func testInitFromRawValue() {
         XCTAssertEqual(LogEnvironment(rawValue: "development"), .development)
         XCTAssertEqual(LogEnvironment(rawValue: "staging"), .staging)
         XCTAssertEqual(LogEnvironment(rawValue: "production"), .production)
-        XCTAssertEqual(LogEnvironment(rawValue: "custom"), .custom)
         XCTAssertNil(LogEnvironment(rawValue: "unknown"))
         XCTAssertNil(LogEnvironment(rawValue: ""))
     }

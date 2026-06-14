@@ -2,8 +2,11 @@
 import Foundation
 import UIKit
 
-/// Manages the SDK's integration with the application lifecycle events.
-class LifecycleManager {
+/// Wires the SDK into the application launch lifecycle. Its sole remaining job is to (re)install
+/// shake-to-share once the app has finished launching, so the gesture overlay attaches to a live
+/// scene rather than racing the SDK's own initialization.
+@MainActor
+final class LifecycleManager {
     private let logger: EasyLogger
 
     init(logger: EasyLogger) {
@@ -18,21 +21,10 @@ class LifecycleManager {
             name: UIApplication.didFinishLaunchingNotification,
             object: nil
         )
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(applicationWillTerminate),
-            name: UIApplication.willTerminateNotification,
-            object: nil
-        )
     }
 
     @objc private func applicationDidFinishLaunching() {
         logger.applicationDidFinishLaunching()
-    }
-
-    @objc private func applicationWillTerminate() {
-        logger.applicationWillTerminate()
     }
 
     deinit {
