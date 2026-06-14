@@ -26,14 +26,10 @@ public extension EasyLogger {
 extension EasyLogger {
     func shareLogFiles(from viewController: UIViewController) {
         Task {
-            guard let fileLogger = await self.loggingActor.fileLogger else { return }
-            let logDirectory = fileLogger.logFileManager.logsDirectory
-            let fileManager = FileManager.default
-            let logDirectoryURL = URL(fileURLWithPath: logDirectory)
-            guard let logFiles = try? fileManager.contentsOfDirectory(
-                at: logDirectoryURL,
-                includingPropertiesForKeys: nil
-            ) else { return }
+            // Resolve the log files as Sendable URLs on the actor; the non-Sendable DDFileLogger
+            // never leaves the actor.
+            let logFiles = await self.loggingActor.logFilePaths().map { URL(fileURLWithPath: $0) }
+            guard !logFiles.isEmpty else { return }
 
             await MainActor.run {
                 let activityVC = UIActivityViewController(

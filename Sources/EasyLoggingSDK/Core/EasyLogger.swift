@@ -1,5 +1,8 @@
 import Foundation
 import Logging
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// `@unchecked Sendable` is the textbook-correct annotation here for an iOS 15 / macOS 12 target
 /// (no `Mutex`/`OSAllocatedUnfairLock` available): the type's mutable state is hand-synchronized.
@@ -236,9 +239,9 @@ public final class EasyLogger: @unchecked Sendable {
         let wasTrackingEnabled = previous.trackScreenLoadingTimes && previous.useAutomaticUIKitScreenTimeTracking
         let willBeTrackingEnabled = new.trackScreenLoadingTimes && new.useAutomaticUIKitScreenTimeTracking
         if !wasTrackingEnabled, willBeTrackingEnabled {
-            UIViewController.setupScreenTimeTracking()
+            Task { @MainActor in UIViewController.setupScreenTimeTracking() }
         } else if wasTrackingEnabled, !willBeTrackingEnabled {
-            UIViewController.tearDownScreenTimeTracking()
+            Task { @MainActor in UIViewController.tearDownScreenTimeTracking() }
         }
 
         let logViewerConfigChanged = previous.enableInAppLogViewer != new.enableInAppLogViewer

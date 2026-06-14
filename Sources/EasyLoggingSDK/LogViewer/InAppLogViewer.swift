@@ -13,8 +13,12 @@ public final class InAppLogViewer {
     private var isEnabled: Bool = false
     private var activationGesture: ActivationGesture = .shake
     private var logViewerWindow: UIWindow?
-    private var maxLogEntries: Int = 1000
-    private var logEntries: [LogEntry] = []
+    // `nonisolated(unsafe)`: the in-memory log buffer is mutated from the nonisolated
+    // `addLogEntry` (called off-main by the logging actor) as well as from the main actor. All
+    // access is hand-synchronized through `logEntriesLock`, so it is intentionally not bound to
+    // the type's `@MainActor` isolation.
+    nonisolated(unsafe) private var maxLogEntries: Int = 1000
+    nonisolated(unsafe) private var logEntries: [LogEntry] = []
     private let logEntriesLock = UnfairLock()
 
     var currentLogger: EasyLogger? {
@@ -69,7 +73,10 @@ public final class InAppLogViewer {
 
     // MARK: - Initialization
 
-    init(logger: EasyLogger) {
+    /// `nonisolated` so the singleton `EasyLogger` (a nonisolated context) can construct the
+    /// viewer during its own init. The initializer only stores the back-reference; it touches no
+    /// main-actor-isolated state.
+    nonisolated init(logger: EasyLogger) {
         self.logger = logger
     }
 
@@ -299,7 +306,9 @@ extension InAppLogViewer {
         )
     }
 
-    nonisolated private static let iso8601Formatter: ISO8601DateFormatter = {
+    // `nonisolated(unsafe)`: ISO8601DateFormatter is not Sendable, but this instance is immutable
+    // after creation and is only used for thread-safe `string(from:)`/`date(from:)` formatting.
+    nonisolated(unsafe) private static let iso8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
