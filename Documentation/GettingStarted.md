@@ -38,10 +38,9 @@ logger.setupEnvironment(.production)
 
 | Environment    | Min Level | Console | File | Crash Detection | Extras |
 |----------------|-----------|---------|------|-----------------|--------|
-| `.development` | debug     | ✓       | ✓    | ✓               | Shake-to-share, log viewer, leak detection, screen tracking |
-| `.staging`     | info      | —       | ✓    | ✓               | Log viewer (access code `qa_access`) |
+| `.development` | debug     | ✓       | ✓    | ✓               | Shake-to-share, log viewer, screen tracking |
+| `.staging`     | info      | —       | ✓    | ✓               | Log viewer |
 | `.production`  | warning   | —       | ✓    | ✓               | — |
-| `.custom`      | info      | —       | ✓    | —               | Override everything yourself |
 
 ### Custom Configuration
 
@@ -167,23 +166,6 @@ let session = URLSession(configuration: sessionConfig)
 // All requests through this session are now logged under the "network" category.
 ```
 
-### Memory Leak Detection
-
-Periodically checks monitored objects and warns if they outlive their expected lifecycle.
-
-```swift
-var config = EasyLogger.Configuration()
-config.enableMemoryLeakDetection = true
-config.memoryLeakCheckInterval = 5.0 // seconds
-logger.configure(config)
-
-// In your view controller
-override func viewDidLoad() {
-    super.viewDidLoad()
-    EasyLogger.shared.monitorForLeaks(self)
-}
-```
-
 ### In-App Log Viewer
 
 A full-screen overlay for QA testers. Supports search, level filtering, and log sharing.
@@ -192,7 +174,6 @@ A full-screen overlay for QA testers. Supports search, level filtering, and log 
 var config = EasyLogger.Configuration()
 config.enableInAppLogViewer = true
 config.logViewerActivationGesture = .shake       // or .longPress / .none
-config.logViewerAccessCode = "123456"             // optional PIN
 config.maxLogViewerEntries = 1000
 logger.configure(config)
 

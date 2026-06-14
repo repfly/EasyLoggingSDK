@@ -17,18 +17,6 @@ public extension EasyLogger {
         )
     }
 
-    /// Asynchronously starts monitoring an object for memory leaks
-    func monitorForLeaksAsync(_ target: AnyObject, identifier: String? = nil) async {
-        guard self.configuration.enableMemoryLeakDetection else { return }
-        await memoryLeakDetector.addTarget(target, identifier: identifier)
-    }
-
-    /// Asynchronously stops monitoring an object for memory leaks
-    func stopMonitoringForLeaksAsync(_ target: AnyObject) async {
-        guard self.configuration.enableMemoryLeakDetection else { return }
-        await memoryLeakDetector.removeTarget(target)
-    }
-
     /// Asynchronously clears all screen time tracking data
     func clearScreenTrackingAsync() async {
         await screenTimeTracker.clearTracking()

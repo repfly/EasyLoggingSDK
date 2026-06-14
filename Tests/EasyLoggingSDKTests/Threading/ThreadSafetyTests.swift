@@ -48,7 +48,7 @@ final class ThreadSafetyTests: XCTestCase {
         let iterations = 1000
         let group = DispatchGroup()
 
-        let environments: [LogEnvironment] = [.development, .staging, .production, .custom]
+        let environments: [LogEnvironment] = [.development, .staging, .production]
 
         for i in 0..<iterations {
             group.enter()

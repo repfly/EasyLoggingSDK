@@ -37,27 +37,6 @@ public extension View {
     func trackScreenTime(screenName: String) -> some View {
         modifier(ScreenTimeTrackingModifier(screenName: screenName))
     }
-
-    /// Track screen time with custom metadata.
-    ///
-    /// - Parameters:
-    ///   - screenName: Name for the screen.
-    ///   - metadata: Additional metadata to include in logs.
-    /// - Returns: The view with enhanced screen tracking.
-    func trackScreenTimeWithMetadata<T: Codable>(
-        screenName: String,
-        metadata: T
-    ) -> some View {
-        modifier(EnhancedScreenTimeTrackingModifier(screenName: screenName, metadata: metadata))
-    }
-
-    /// Track screen time and log screen transitions.
-    ///
-    /// - Parameter screenName: Name for the screen.
-    /// - Returns: The view with transition logging.
-    func trackScreenTimeWithTransitions(screenName: String) -> some View {
-        modifier(TransitionTrackingModifier(screenName: screenName))
-    }
 }
 
 // MARK: - View Modifiers (Internal)
@@ -72,49 +51,6 @@ private struct ScreenTimeTrackingModifier: ViewModifier {
             }
             .onDisappear {
                 EasyLogger.shared.endScreenTracking(name: screenName)
-            }
-    }
-}
-
-private struct EnhancedScreenTimeTrackingModifier<T: Codable>: ViewModifier {
-    let screenName: String
-    let metadata: T
-
-    func body(content: Content) -> some View {
-        content
-            .onAppear {
-                EasyLogger.shared.trackScreenAppearance(name: screenName)
-                EasyLogger.shared.internalInfo(
-                    "Screen appeared: \(screenName)",
-                    metadata: metadata
-                )
-            }
-            .onDisappear {
-                EasyLogger.shared.endScreenTracking(name: screenName)
-                EasyLogger.shared.internalInfo(
-                    "Screen disappeared: \(screenName)",
-                    metadata: metadata
-                )
-            }
-    }
-}
-
-private struct TransitionTrackingModifier: ViewModifier {
-    let screenName: String
-
-    func body(content: Content) -> some View {
-        content
-            .onAppear {
-                EasyLogger.shared.trackScreenAppearance(name: screenName)
-                EasyLogger.shared.internalDebug(
-                    "Screen transition: \(screenName) appeared"
-                )
-            }
-            .onDisappear {
-                EasyLogger.shared.endScreenTracking(name: screenName)
-                EasyLogger.shared.internalDebug(
-                    "Screen transition: \(screenName) disappeared"
-                )
             }
     }
 }

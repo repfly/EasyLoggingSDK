@@ -17,9 +17,7 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(config.maxLogFiles, 7)
         XCTAssertNil(config.logsDirectory)
         XCTAssertFalse(config.useAutomaticUIKitScreenTimeTracking)
-        XCTAssertFalse(config.enableMemoryLeakDetection)
         XCTAssertFalse(config.enableInAppLogViewer)
-        XCTAssertNil(config.logViewerAccessCode)
         XCTAssertEqual(config.maxLogViewerEntries, 1000)
     }
 

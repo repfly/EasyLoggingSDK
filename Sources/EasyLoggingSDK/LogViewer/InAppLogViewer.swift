@@ -12,7 +12,6 @@ public final class InAppLogViewer {
     private weak var logger: EasyLogger?
     private var isEnabled: Bool = false
     private var activationGesture: ActivationGesture = .shake
-    private var accessCode: String?
     private var logViewerWindow: UIWindow?
     private var maxLogEntries: Int = 1000
     private var logEntries: [LogEntry] = []
@@ -76,10 +75,9 @@ public final class InAppLogViewer {
 
     // MARK: - Configuration
 
-    func configure(isEnabled: Bool, activationGesture: ActivationGesture, accessCode: String?, maxLogEntries: Int) {
+    func configure(isEnabled: Bool, activationGesture: ActivationGesture, maxLogEntries: Int) {
         self.isEnabled = isEnabled
         self.activationGesture = activationGesture
-        self.accessCode = accessCode
         self.maxLogEntries = maxLogEntries
 
         if isEnabled {
@@ -423,52 +421,7 @@ extension InAppLogViewer {
         }
 
         let topViewController = rootViewController.topMostViewController
-
-        if let accessCode = self.accessCode, !accessCode.isEmpty {
-            presentAccessCodeScreen(from: topViewController)
-        } else {
-            presentLogViewerScreen(from: topViewController)
-        }
-    }
-
-    private func presentAccessCodeScreen(from viewController: UIViewController) {
-        let alertController = UIAlertController(
-            title: "QA Log Viewer",
-            message: "Enter access code to view logs",
-            preferredStyle: .alert
-        )
-
-        alertController.addTextField { textField in
-            textField.placeholder = "Access Code"
-            textField.isSecureTextEntry = true
-            textField.keyboardType = .numberPad
-        }
-
-        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
-
-        let submitAction = UIAlertAction(title: "Submit", style: .default) { [weak self, weak alertController] _ in
-            guard let self = self,
-                  let textField = alertController?.textFields?.first,
-                  let enteredCode = textField.text,
-                  enteredCode == self.accessCode else {
-
-                let errorAlert = UIAlertController(
-                    title: "Invalid Code",
-                    message: "The access code you entered is incorrect.",
-                    preferredStyle: .alert
-                )
-                errorAlert.addAction(UIAlertAction(title: "OK", style: .default))
-                viewController.present(errorAlert, animated: true)
-                return
-            }
-
-            self.presentLogViewerScreen(from: viewController)
-        }
-
-        alertController.addAction(cancelAction)
-        alertController.addAction(submitAction)
-
-        viewController.present(alertController, animated: true)
+        presentLogViewerScreen(from: topViewController)
     }
 
     private func presentLogViewerScreen(from viewController: UIViewController) {

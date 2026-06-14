@@ -45,48 +45,4 @@ enum DirectoryHelper {
             return fallbackPath
         }
     }
-    
-    /// Cleans up old log files
-    /// - Parameter maxAge: Maximum age of log files in days
-    static func cleanOldLogFiles(maxAge: TimeInterval = 7 * 24 * 60 * 60) {
-        let fileManager = FileManager.default
-        let logDirectory = getLogDirectory()
-        let logDirectoryURL = URL(fileURLWithPath: logDirectory)
-        
-        guard let contents = try? fileManager.contentsOfDirectory(
-            at: logDirectoryURL,
-            includingPropertiesForKeys: [.creationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
-        
-        let cutoffDate = Date().addingTimeInterval(-maxAge)
-        
-        contents.forEach { fileURL in
-            guard let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
-                  let creationDate = attributes[.creationDate] as? Date,
-                  creationDate < cutoffDate else { return }
-            
-            try? fileManager.removeItem(at: fileURL)
-        }
-    }
-    
-    /// Returns the total size of log files
-    /// - Returns: Total size in bytes
-    static func getLogFilesSize() -> UInt64 {
-        let fileManager = FileManager.default
-        let logDirectory = getLogDirectory()
-        let logDirectoryURL = URL(fileURLWithPath: logDirectory)
-        
-        guard let contents = try? fileManager.contentsOfDirectory(
-            at: logDirectoryURL,
-            includingPropertiesForKeys: [.fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else { return 0 }
-        
-        return contents.reduce(0) { totalSize, fileURL in
-            guard let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
-                  let fileSize = attributes[.size] as? UInt64 else { return totalSize }
-            return totalSize + fileSize
-        }
-    }
 }

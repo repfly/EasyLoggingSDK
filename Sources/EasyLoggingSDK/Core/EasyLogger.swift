@@ -19,7 +19,6 @@ public final class EasyLogger: @unchecked Sendable {
     let screenTimeTracker = ScreenTimeTracker()
 
     #if canImport(UIKit)
-    var memoryLeakDetector: MemoryLeakDetector!
     var _logViewer: InAppLogViewer!
 
     /// Internal access to the file logger for ``InAppLogViewer`` file history.
@@ -83,7 +82,6 @@ public final class EasyLogger: @unchecked Sendable {
 
         #if canImport(UIKit)
         self._logViewer = InAppLogViewer(logger: self)
-        self.memoryLeakDetector = MemoryLeakDetector(logger: self)
         #endif
 
         Task { [config = self._configuration] in
@@ -187,17 +185,8 @@ public final class EasyLogger: @unchecked Sendable {
         /// Requires ``trackScreenLoadingTimes`` to be `true`.
         public var useAutomaticUIKitScreenTimeTracking: Bool = false
 
-        /// Periodically check monitored objects for potential memory leaks. UIKit only.
-        public var enableMemoryLeakDetection: Bool = false
-
-        /// Interval (seconds) between memory leak checks. Default: 5.0s.
-        public var memoryLeakCheckInterval: TimeInterval = LoggingConstants.TimeInterval.defaultLeakCheckInterval
-
         /// Enable the in-app log viewer overlay accessible via gesture. Requires ``shouldLogToFile`` for file history.
         public var enableInAppLogViewer: Bool = false
-
-        /// Optional access code required to open the in-app log viewer. Useful for QA builds.
-        public var logViewerAccessCode: String?
 
         /// Gesture that activates the in-app log viewer.
         public var logViewerActivationGesture: ActivationGesture = .shake
@@ -235,24 +224,8 @@ public final class EasyLogger: @unchecked Sendable {
             UIViewController.tearDownScreenTimeTracking()
         }
 
-        let wasLeakDetectionEnabled = previous.enableMemoryLeakDetection
-        let willBeLeakDetectionEnabled = new.enableMemoryLeakDetection
-        if !wasLeakDetectionEnabled, willBeLeakDetectionEnabled {
-            memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: new.memoryLeakCheckInterval)
-            Task { await memoryLeakDetector.startMonitoring() }
-        } else if wasLeakDetectionEnabled, !willBeLeakDetectionEnabled {
-            Task { await memoryLeakDetector.stopMonitoring() }
-        } else if wasLeakDetectionEnabled, willBeLeakDetectionEnabled {
-            Task {
-                await memoryLeakDetector.stopMonitoring()
-                self.memoryLeakDetector = MemoryLeakDetector(logger: self, checkInterval: new.memoryLeakCheckInterval)
-                await self.memoryLeakDetector.startMonitoring()
-            }
-        }
-
         let logViewerConfigChanged = previous.enableInAppLogViewer != new.enableInAppLogViewer
             || previous.logViewerActivationGesture != new.logViewerActivationGesture
-            || previous.logViewerAccessCode != new.logViewerAccessCode
             || previous.maxLogViewerEntries != new.maxLogViewerEntries
 
         if logViewerConfigChanged || new.enableInAppLogViewer {
@@ -260,7 +233,6 @@ public final class EasyLogger: @unchecked Sendable {
                 self.logViewer.configure(
                     isEnabled: new.enableInAppLogViewer,
                     activationGesture: new.logViewerActivationGesture,
-                    accessCode: new.logViewerAccessCode,
                     maxLogEntries: new.maxLogViewerEntries
                 )
             }
