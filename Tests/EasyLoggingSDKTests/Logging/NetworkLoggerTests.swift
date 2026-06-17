@@ -1,5 +1,6 @@
 import XCTest
-@testable import EasyLoggingSDK
+@testable import EasyLoggingCore
+@testable import EasyLoggingNetwork
 
 final class NetworkLoggerTests: XCTestCase {
 

@@ -1,6 +1,6 @@
 import XCTest
 import CocoaLumberjack
-@testable import EasyLoggingSDK
+@testable import EasyLoggingCore
 
 final class EasyLoggerCodableTests: XCTestCase {
 

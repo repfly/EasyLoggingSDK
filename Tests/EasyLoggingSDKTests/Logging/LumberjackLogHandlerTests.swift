@@ -1,6 +1,6 @@
 import XCTest
 import Logging
-@testable import EasyLoggingSDK
+@testable import EasyLoggingCore
 
 final class LumberjackLogHandlerTests: XCTestCase {
 

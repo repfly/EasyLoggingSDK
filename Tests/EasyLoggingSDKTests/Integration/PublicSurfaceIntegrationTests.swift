@@ -1,5 +1,5 @@
 import XCTest
-@testable import EasyLoggingSDK
+@testable import EasyLoggingCore
 
 /// End-to-end integration coverage for the consolidated public surface.
 ///

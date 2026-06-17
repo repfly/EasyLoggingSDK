@@ -1,5 +1,5 @@
 import XCTest
-@testable import EasyLoggingSDK
+@testable import EasyLoggingUI
 
 final class ScreenTimeTrackerTests: XCTestCase {
 
