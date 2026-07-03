@@ -20,11 +20,12 @@ Or in Xcode: **File → Add Package Dependency** → paste the URL above.
 ```swift
 import EasyLoggingSDK
 
+EasyLoggingSDK.activate()        // once at launch, to enable the UIKit/SwiftUI features
 let logger = EasyLogger.shared
 logger.info("App launched")
 ```
 
-No additional setup is needed — the SDK hooks into the UIKit lifecycle automatically.
+`activate()` wires up the in-app viewer, screen tracking, and shake-to-share. Pure logging (`EasyLoggingCore`) works without it. For a slim build, import only the modules you need and call `EasyLoggingUI.install()` instead.
 
 ## Configuration
 
@@ -183,13 +184,14 @@ let session = URLSession(configuration: sessionConfig)
 
 ### In-App Log Viewer
 
-A full-screen overlay for QA testers. Supports search, level filtering, and log sharing.
+A debugging overlay for QA testers, with a **Console** tab (search, level filtering) and a **Network** tab (per-request headers, pretty-printed JSON bodies, metrics, copy-as-cURL). Requires `EasyLoggingSDK.activate()` at launch.
 
 ```swift
 var config = EasyLogger.Configuration()
 config.enableInAppLogViewer = true
 config.logViewerActivationGesture = .shake       // or .longPress / .none
 config.maxLogViewerEntries = 1000
+config.maxNetworkViewerEntries = 500
 logger.configure(config)
 
 // Or open programmatically

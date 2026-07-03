@@ -1,5 +1,5 @@
 import XCTest
-@testable import EasyLoggingSDK
+@testable import EasyLoggingCore
 
 /// Asserts the redaction CONTRACT enforced by ``LogMetadata/redactedDictionary(isProduction:)``.
 ///

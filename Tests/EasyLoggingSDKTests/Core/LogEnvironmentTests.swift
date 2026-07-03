@@ -1,5 +1,5 @@
 import XCTest
-@testable import EasyLoggingSDK
+@testable import EasyLoggingCore
 
 final class LogEnvironmentTests: XCTestCase {
 

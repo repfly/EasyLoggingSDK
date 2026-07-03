@@ -4,38 +4,50 @@ import PackageDescription
 
 let package = Package(
     name: "EasyLoggingSDK",
-    // iOS and macOS are the supported platforms. The SDK depends heavily on UIKit, so tvOS/
-    // watchOS are deliberately NOT declared (they would be unverified).
     platforms: [
         .iOS(.v15),
         .macOS(.v12)
     ],
     products: [
-        .library(
-            name: "EasyLoggingSDK",
-            targets: ["EasyLoggingSDK"]
-        ),
+        .library(name: "EasyLoggingSDK", targets: ["EasyLoggingSDK"]),
+        .library(name: "EasyLoggingCore", targets: ["EasyLoggingCore"]),
+        .library(name: "EasyLoggingNetwork", targets: ["EasyLoggingNetwork"]),
+        .library(name: "EasyLoggingUI", targets: ["EasyLoggingUI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMajor(from: "3.8.0")),
         .package(url: "https://github.com/apple/swift-log.git", .upToNextMajor(from: "1.4.0")),
-        // Build-tool plugin only: generates DocC documentation. It is NOT linked into the library,
-        // so it adds no runtime dependency for consumers of EasyLoggingSDK.
         .package(url: "https://github.com/apple/swift-docc-plugin", .upToNextMajor(from: "1.0.0")),
     ],
     targets: [
-        // swift-tools-version 6.0 makes the Swift 6 language mode the default for every target,
-        // so complete strict-concurrency checking is on without the experimental flag.
         .target(
-            name: "EasyLoggingSDK",
+            name: "EasyLoggingCore",
             dependencies: [
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "CocoaLumberjack", package: "CocoaLumberjack"),
             ]
         ),
+        .target(
+            name: "EasyLoggingNetwork",
+            dependencies: ["EasyLoggingCore"]
+        ),
+
+        .target(
+            name: "EasyLoggingUI",
+            dependencies: ["EasyLoggingCore", "EasyLoggingNetwork"]
+        ),
+        .target(
+            name: "EasyLoggingSDK",
+            dependencies: ["EasyLoggingCore", "EasyLoggingNetwork", "EasyLoggingUI"]
+        ),
         .testTarget(
             name: "EasyLoggingSDKTests",
-            dependencies: ["EasyLoggingSDK"]
+            dependencies: [
+                "EasyLoggingSDK",
+                "EasyLoggingCore",
+                "EasyLoggingNetwork",
+                "EasyLoggingUI",
+            ]
         ),
     ]
 )

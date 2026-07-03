@@ -1,5 +1,5 @@
 import XCTest
-@testable import EasyLoggingSDK
+@testable import EasyLoggingCore
 
 final class ConfigurationTests: XCTestCase {
 
@@ -18,6 +18,8 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertFalse(config.useAutomaticUIKitScreenTimeTracking)
         XCTAssertFalse(config.enableInAppLogViewer)
         XCTAssertEqual(config.maxLogViewerEntries, 1000)
+        XCTAssertFalse(config.enableNetworkLogging)
+        XCTAssertEqual(config.maxNetworkViewerEntries, 500)
     }
 
     func testCustomConfiguration() {

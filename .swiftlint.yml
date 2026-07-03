@@ -16,6 +16,9 @@ opt_in_rules:
   - sorted_first_last
 
 included:
+  - Sources/EasyLoggingCore
+  - Sources/EasyLoggingNetwork
+  - Sources/EasyLoggingUI
   - Sources/EasyLoggingSDK
   - Tests/EasyLoggingSDKTests
 

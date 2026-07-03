@@ -1,7 +1,7 @@
 import XCTest
 import CocoaLumberjack
 import Logging
-@testable import EasyLoggingSDK
+@testable import EasyLoggingCore
 
 final class LogLevelTests: XCTestCase {
 
