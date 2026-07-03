@@ -9,26 +9,36 @@ swift-log behind a single, thread-safe, privacy-aware API.
 
 ## Overview
 
-`EasyLoggingSDK` gives you one logger — ``EasyLogger/shared`` — backed by industry-standard
-frameworks. It is thread-safe, redacts sensitive metadata automatically, and ships with
-opt-in UIKit lifecycle integration, network logging, screen-time tracking, and an in-app log
-viewer.
+`EasyLoggingSDK` is the umbrella module: importing it re-exports the three feature modules,
+and calling ``EasyLoggingSDK/activate()`` once at launch wires up the opt-in features.
 
 ```swift
 import EasyLoggingSDK
+
+EasyLoggingSDK.activate()   // attaches the in-app viewer, screen tracking, shake-to-share
 
 let logger = EasyLogger.shared
 logger.info("App launched")
 logger.debug("Cache hit", category: "storage")
 ```
 
-Every public logging call is funneled through a single serial pipeline, so log lines,
-configuration changes, and flush markers are always delivered in strict FIFO order.
+Pure logging works without `activate()` — it is what attaches the UIKit/SwiftUI layer and
+keeps the network inspector's store in sync with your configuration.
+
+The package is split so you only link what you use:
+
+- `EasyLoggingCore` — the logging engine: `EasyLogger`, `EasyLogger.Configuration`,
+  `LogLevel`, `LogFormat`, `LogEnvironment`, `LogMetadata`, and `RedactionLevel`.
+  UIKit-free; documented in the `EasyLoggingCore` module.
+- `EasyLoggingNetwork` — the opt-in `URLProtocol` request interceptor (`NetworkLogger`)
+  and the in-memory `NetworkActivityStore` behind the network inspector.
+- `EasyLoggingUI` — the in-app log viewer, screen-time tracking, and shake-to-share.
+  Slim builds that link it without the umbrella call `EasyLoggingUI.install()` instead
+  of `activate()`.
 
 ## Getting Started
 
-Pick an environment preset for a one-line setup, or build a custom
-``EasyLogger/Configuration``:
+Pick an environment preset for a one-line setup, or build a custom `EasyLogger.Configuration`:
 
 ```swift
 // Environment preset
@@ -43,7 +53,7 @@ EasyLogger.shared.configure(config)
 ```
 
 Log at any severity using the level convenience methods. Each accepts an optional `category`
-and ``LogMetadata``:
+and `LogMetadata`:
 
 ```swift
 logger.trace("Entered function")
@@ -58,8 +68,8 @@ logger.critical("Unrecoverable state")
 
 Redaction protects **metadata** values — never interpolate secrets into the message string.
 Keys that look sensitive (for example `password`, `token`, `authorization`) are redacted
-automatically. For explicit control, use ``LogMetadata/setRedactable(_:forKey:redaction:)``
-with a ``RedactionLevel``:
+automatically. For explicit control, use `LogMetadata.setRedactable(_:forKey:redaction:)`
+with a `RedactionLevel`:
 
 ```swift
 var metadata = LogMetadata()
@@ -77,32 +87,10 @@ in-memory buffer and the on-disk files only ever see redacted metadata.
 `EasyLoggingSDK` is built in the **Swift 6 language mode** with complete strict-concurrency
 checking — both the library and its tests compile cleanly with no concurrency warnings:
 
-- ``EasyLogger`` is `Sendable`; its mutable state is hand-synchronized with an
+- `EasyLogger` is `Sendable`; its mutable state is hand-synchronized with an
   `os_unfair_lock` (the textbook annotation for an iOS 15 / macOS 12 target).
 - All log delivery flows through one `Sendable` serial pipeline that preserves FIFO order.
-- ``LogMetadata`` and ``EasyLogger/Configuration`` are value types and `Sendable`, so they
+- `LogMetadata` and `EasyLogger.Configuration` are value types and `Sendable`, so they
   cross actor boundaries safely.
 - Every public method has an `async` variant; use `await logger.flush()` to guarantee all
   enqueued records are processed (for example before app exit).
-
-## Topics
-
-### Essentials
-
-- ``EasyLogger``
-- ``EasyLogger/Configuration``
-- ``LogLevel``
-
-### Metadata & Privacy
-
-- ``LogMetadata``
-- ``RedactionLevel``
-
-### Formatting & Environments
-
-- ``LogFormat``
-- ``LogEnvironment``
-
-### Network Logging
-
-- ``NetworkLogger``

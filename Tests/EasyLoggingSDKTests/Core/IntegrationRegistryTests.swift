@@ -48,6 +48,21 @@ final class IntegrationRegistryTests: XCTestCase {
         XCTAssertEqual(stub.calls[1].new.minimumLogLevel, .warning)
     }
 
+    func testRegisteringSameIntegrationTwiceIsNoOp() {
+        let logger = EasyLogger.shared
+        let stub = StubIntegration()
+
+        logger.register(stub)
+        logger.register(stub)
+        XCTAssertEqual(stub.calls.count, 1, "re-registration must not replay again")
+
+        var config = EasyLogger.Configuration()
+        config.minimumLogLevel = .error
+        logger.configure(config)
+
+        XCTAssertEqual(stub.calls.count, 2, "a duplicate registration must not double-deliver changes")
+    }
+
     func testRegisteredLogSinkReceivesRecordsWhenViewerEnabled() async {
         let logger = EasyLogger.shared
         var config = EasyLogger.Configuration()

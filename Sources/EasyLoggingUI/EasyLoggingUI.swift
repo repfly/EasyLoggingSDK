@@ -10,6 +10,7 @@ public enum EasyLoggingUI {
     /// Wires the in-app viewer, screen tracking, and shake-to-share into `logger`. Idempotent.
     @MainActor
     public static func install(logger: EasyLogger = .shared) {
+        EasyLoggingNetwork.install(logger: logger)
         logger.register(LogViewerIntegration.shared)
         logger.register(ScreenTrackingIntegration.shared)
         logger.register(ShakeToShareIntegration.shared)
@@ -34,7 +35,6 @@ final class LogViewerIntegration: EasyLoggerIntegration {
     }
 
     nonisolated func apply(previous: EasyLogger.Configuration?, new: EasyLogger.Configuration) {
-        NetworkActivityStore.shared.capacity = new.maxNetworkViewerEntries
         Task { @MainActor in
             guard new.enableInAppLogViewer || self.viewer != nil else { return }
             let viewer = self.ensureViewer()

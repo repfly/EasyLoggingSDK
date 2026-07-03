@@ -17,6 +17,9 @@ public extension EasyLogger {
     func networkLoggingSessionConfiguration(
         base: URLSessionConfiguration = .default
     ) -> URLSessionConfiguration {
+        // Self-wire the store integration so `maxNetworkViewerEntries` is honored even in slim
+        // builds that never call `EasyLoggingSDK.activate()` / `EasyLoggingNetwork.install()`.
+        EasyLoggingNetwork.install(logger: self)
         guard configuration.enableNetworkLogging else { return base }
 
         let config = base

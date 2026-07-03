@@ -80,13 +80,21 @@ public final class EasyLogger: @unchecked Sendable {
     // MARK: - Integrations
 
     /// Registers a feature integration. The current configuration is replayed immediately (so a
-    /// late registrant catches up), then every subsequent change is forwarded.
+    /// late registrant catches up), then every subsequent change is forwarded. Registering the
+    /// same instance again is a no-op, which keeps `install()`-style entry points idempotent.
+    ///
+    /// The replay runs outside `stateLock` (calling out under the lock could deadlock if an
+    /// integration re-enters the logger), so a `configure` racing a `register` can deliver the
+    /// newer configuration before the `previous: nil` replay. Register integrations at launch,
+    /// before configuration churn, to avoid acting on the stale replay.
     public func register(_ integration: any EasyLoggerIntegration) {
-        let current = stateLock.withLock { () -> Configuration in
+        let replay = stateLock.withLock { () -> Configuration? in
+            guard !self.integrations.contains(where: { $0 === integration }) else { return nil }
             self.integrations.append(integration)
             return self.configurationStorage
         }
-        integration.apply(previous: nil, new: current)
+        guard let replay else { return }
+        integration.apply(previous: nil, new: replay)
     }
 
     /// Routes log records to a ``LogSink``, enqueued through the pipeline to preserve FIFO order.

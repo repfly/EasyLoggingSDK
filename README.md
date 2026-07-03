@@ -6,7 +6,8 @@ A Swift logging SDK for iOS that wraps CocoaLumberjack and Swift-log behind a si
 
 - **Unified Interface** — one logger backed by industry-standard frameworks.
 - **Swift 6 & Concurrency-Safe** — builds in the Swift 6 language mode with complete strict-concurrency checking; log delivery is FIFO-ordered through a serializing actor pipeline (`await logger.flush()` guarantees delivery).
-- **Zero-Setup Lifecycle** — hooks into UIKit automatically; no `AppDelegate` code needed.
+- **One-Line Setup** — call `EasyLoggingSDK.activate()` at launch and every UIKit/SwiftUI feature is wired up.
+- **Modular** — four products (Core / Network / UI / umbrella) so slim builds link only what they use.
 - **SwiftUI Ready** — `.trackScreenTime(screenName:)` view modifier and manual tracking helpers.
 - **Log Categories** — tag messages with a subsystem (`"auth"`, `"networking"`, …) for filtering.
 - **Privacy Redaction** — mark metadata values as `.auto`, `.always`, or `.never` redacted; sensitive data is replaced with `<REDACTED>` in production.
@@ -32,10 +33,27 @@ Or in Xcode: **File → Add Package Dependency** → paste the URL.
 ```swift
 import EasyLoggingSDK
 
+EasyLoggingSDK.activate()        // once at launch — wires the viewer, screen tracking, shake-to-share
+
 let logger = EasyLogger.shared
 logger.info("App launched")
 logger.debug("Cache hit", category: "storage")
 ```
+
+Pure logging works without `activate()`; it is what attaches the opt-in UI and network-inspector features.
+
+## Modules
+
+The package ships four products, so you only link what you use:
+
+| Product | What it contains | Depends on |
+|---|---|---|
+| `EasyLoggingCore` | The logging engine — configuration, levels, formats, metadata, redaction, file management. UIKit-free. | CocoaLumberjack, swift-log |
+| `EasyLoggingNetwork` | Opt-in `URLProtocol` request interceptor and the in-memory network activity store. | Core |
+| `EasyLoggingUI` | In-app log viewer, screen-time tracking, shake-to-share. UIKit/SwiftUI. | Core, Network |
+| `EasyLoggingSDK` | Umbrella — re-exports the other three; `EasyLoggingSDK.activate()` wires everything up. | all of the above |
+
+For a slim build, depend on `EasyLoggingCore` (and optionally `EasyLoggingNetwork`) directly; call `EasyLoggingUI.install()` instead of `activate()` if you link the UI layer without the umbrella.
 
 ## Requirements
 
